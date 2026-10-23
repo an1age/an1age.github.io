@@ -10,18 +10,65 @@ const BOARDS = {
   xl: { cols: 40, rows: 22, name: "Огромная", hint: "40 × 22, 880 цветов. Лучше играть с компьютера." }
 };
 const ROW_L = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+/* Палитра как на доске настольной игры: тон идёт по кругу вдоль краёв (сверху красные, справа фиолетовые и синие,
+   снизу зелёные, слева жёлтые), к центру цвета бледнеют, и ни один цвет не повторяется у противоположных краёв.
+   ORIGINAL — цвета доски 30 × 16 (по 6 hex-символов на клетку, строка за строкой). Большая палитра берёт их как есть,
+   остальные размеры — плавная (бикубическая) интерполяция между ними в пространстве OKLab. */
+const ORIGINAL = [
+  "612b0f6b2710752214831f19941e1e9e1c20af1e23c62127df1f26ec1c24ec1e23ed1d25ec1c2eed1a3bec1946e91854e51565e21075d70f83d3148dc82791bb2d91b23394a835949f38949338958c3d98833d977d3e9973419a",
+  "884b1f94441f9c3f20ad3f24b83825c62d27d62827e42024ec2324ed282aee2932ee2932ed2041ec204dec1c5eec166eed107ce90d8ddb2b92cd3894bf3f98b43d97a93c979e3e97963d978d3d96843e987d3e99723d97683b96",
+  "a66128ac5b26ba5a27c14e27cc4827d64027e13926e93024ee362cee3c40ef3f4cee3b51ee3b5dee3267ed3078ee2c87eb3196da4398ca499bbb4c9db4499ba647999e45999543988c4299843e98793d97733c976639965a3191",
+  "c9822ad78228dd7627e87824e66a25ea5e25f1602bef5533f04f3def5651f05d65f05e6bef5871f0537eef508bef4f9ddf55a0cd57a1be5fa5b659a2a554a19b4e9e944c9e8d499e82449b7b41986f3e99663795583393472e8a",
+  "e69c23f1991ef7921cf68c1ef68625f4792ef4783df36e45f37052f27767f37674f27781f27789f27094f069a4e76facd371acc771aebb71aeac67aa9e5fa69359a58d54a38451a07a499d6f459b623e98583393492e8f342b84",
+  "feb415fcb122faab2bfbab3afaa741f9a34cf69755f68f5ef48864f48873f58f83f38f8ff48f99f48da3f287b5e08dbbd18bbdc68cbeb982b9aa7ab69c74b39067ab865ea77b59a77251a2634a9e5a429a4c3293392f8f2c2978",
+  "fdc113fdc028fcb72cfcb43bfcb95ef9ac56faaa63f9a26df7a279f7a085f69e94f69d99f59ea5f69baaf39dc2e1a5cbd0a6cccdadd2b898c7a88bc19a82bc9a82bc7f6eb27265ad675ca85954a44f4ba044419a3136942b2f86",
+  "fcd017fecd29ffc82efdc73ffec64bfdc058fdbc60fcb96bfbb379fab083f9af8ef9b29ef5b6adf3b6b4ecb6c8d8b7d6cdb8d9ccbddcb4a9d3a79fce9794c98388c2757dbd6a75b75c6ab15161ae4859a73e4fa12f449d253a97",
+  "fce118fcdc27fcda33fcd942fcde4cfed859fddb60fbd66bf5db7cf1e092ecdc9ee8e1b3e1e0c2dce1cbd2e0d3c6dde3c1d9f1c0d8f0a7c8e999b9e08aaad97aa2d77093cb6686c35679bb4c6cb54262ad3b5ba8334fa227459d",
+  "f9ec24f9eb29faeb36f9ee45f9f04df9f25cf7f06aefee82e7eb8cdee99dd8e7acd3e8bfd1e8cacde9d3c7e6d6bbe5e4b3e2f2b2e2f69edcf587d6f77dc6ee71b5e465a8dc5c97d1518bca4b7cbf3f6db63765b0365bab3050a3",
+  "f6ef3cf6ef3ff5ee46f4ef4df1ec5aecec68e6e879dfe784d6e485c8df8dbedd97b5dba2b4dbafb0dab5addbc1aeddd7aadddea8dde399d8e789d7ee73d1f564cbf45aaadd549cd44889c94889c93e7dc03b6fb83664af335cab",
+  "f1ec21f0eb2debe932e9e838e5e643dce453d0df60bfda67b1d66da8d3779fd07d98d08992ce988dcd9b8ecfa78dcfb38ed1c08bd1c684cfcc7acdd469cada56c8e03bc6ef39baec3ca9e13b9ad44188c83879bd3b6fb83465b1",
+  "e0e320dbe127d6e12fcfdf37c8db43bad644aed24c9fcd5190c95885c65e79c46871c27170c17a6dc1836dc18370c39370c59c73c6a675c8ac6bc6b460c5bb55c4c547c3cf30c2db1bbae421a9e1289cd7378ccc317ec12c72b8",
+  "c2d82dbdd630b5d333abcf39a0cc3994c93d81c24079c1436dbc455db54554b34b4db25446b75949b86950bb7357bd7b59bd7d5cbf875fc08b60c0925bc09e50c1ab46c0b337bfc327bece17b9d80faede17a5dd2395d32983c7",
+  "9ec4399ac43c94c23c88bf407ebb426db34363b04454a8464fa646409e46359d4830a2482baa4b2ab14b31b45438b65d42b86447b86e49ba7251bc7652bd8549bc9045be9f39bea92fbdb729bfc61bbdd20eb2d30fa8da179fdb",
+  "7ba54176a9406fa74465a24359a4454c9f454398453996452991441e89431a8b43159145159a4719a1491cab4a21b04c2cb34c33b4553ab65e3eb8653fb97039b97c33ba8a2cb99621bba11bbaac18bcbd14bcc711b7d70fb1e2"
+];
+const toLin = c => (c /= 255) <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+const toByte = c => Math.round(Math.max(0, Math.min(1, c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)) * 255);
+function hexToLab(h) {
+  const [r, g, b] = [0, 2, 4].map(i => toLin(parseInt(h.slice(i, i + 2), 16)));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+}
+function labToRgb([L, a, b]) {
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  return `rgb(${toByte(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)} ${toByte(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)} ${toByte(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)})`;
+}
+const HEX = ORIGINAL.map(row => row.match(/.{6}/g)), LAT = HEX.map(row => row.map(hexToLab)), LR = LAT.length, LC = LAT[0].length;
+/* Опорная точка; за краем — продолжаем линейно, чтобы у краёв цвет не «застывал» */
+function latAt(i, j, k) {
+  if (i < 0) return 2 * latAt(0, j, k) - latAt(1, j, k);
+  if (i > LR - 1) return 2 * latAt(LR - 1, j, k) - latAt(LR - 2, j, k);
+  if (j < 0) return 2 * latAt(i, 0, k) - latAt(i, 1, k);
+  if (j > LC - 1) return 2 * latAt(i, LC - 1, k) - latAt(i, LC - 2, k);
+  return LAT[i][j][k];
+}
+const catmull = (p0, p1, p2, p3, t) => 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
+function fieldColor(fy, fx) {
+  const i = Math.min(Math.floor(fy), LR - 2), j = Math.min(Math.floor(fx), LC - 2), ty = fy - i, tx = fx - j;
+  return labToRgb([0, 1, 2].map(k => {
+    const col = [-1, 0, 1, 2].map(d => catmull(latAt(i + d, j - 1, k), latAt(i + d, j, k), latAt(i + d, j + 1, k), latAt(i + d, j + 2, k), tx));
+    return catmull(col[0], col[1], col[2], col[3], ty);
+  }));
+}
 const boardCache = {};
-/* По горизонтали — тон по кругу, по вертикали — от светлых пастельных к тёмным */
 function board(key) {
   key = BOARDS[key] ? key : "m";
   if (boardCache[key]) return boardCache[key];
-  const { cols, rows } = BOARDS[key], colors = [];
-  for (let r = 0; r < rows; r++) {
-    const t = r / (rows - 1);
-    const l = 88 - t * 70;
-    const s = 62 + 30 * Math.sin(Math.PI * Math.min(1, t * 1.25));
-    for (let c = 0; c < cols; c++) colors.push(`hsl(${Math.round(c * 360 / cols)} ${Math.round(s)}% ${Math.round(l)}%)`);
-  }
+  const { cols, rows } = BOARDS[key], colors = [], same = cols === LC && rows === LR;
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) colors.push(same ? "#" + HEX[r][c] : fieldColor(r * (LR - 1) / (rows - 1), c * (LC - 1) / (cols - 1)));
   return (boardCache[key] = { key, cols, rows, cells: cols * rows, colors });
 }
 /* Текущая палитра: у комнаты своя, на главной — обычная */
@@ -93,7 +140,7 @@ function createGrid(root, handlers) {
     root.style.setProperty("--gw", (bd.cols / (bd.rows * 1.15)).toFixed(4));
     const top = Array.from({ length: bd.cols }, (_, c) => `<span style="left:${((c + .5) / bd.cols * 100).toFixed(3)}%">${c + 1}</span>`).join("");
     const left = Array.from({ length: bd.rows }, (_, r) => `<span style="top:${((r + .5) / bd.rows * 100).toFixed(3)}%">${ROW_L[r]}</span>`).join("");
-    root.innerHTML = `<div class="ax ax-top" aria-hidden="true">${top}</div><div class="ax ax-left" aria-hidden="true">${left}</div><div class="cells">${bd.colors.map(c => `<i style="background:${c}"></i>`).join("")}</div><div class="marks"></div>`;
+    root.innerHTML = `<div class="ax ax-top" aria-hidden="true">${top}</div><div class="ax ax-left" aria-hidden="true">${left}</div><div class="ax ax-bottom" aria-hidden="true">${top}</div><div class="ax ax-right" aria-hidden="true">${left}</div><div class="cells">${bd.colors.map(c => `<i style="background:${c}"></i>`).join("")}</div><div class="marks"></div>`;
     marks = root.querySelector(".marks");
   }
   const cellAt = e => {
@@ -1253,7 +1300,7 @@ document.addEventListener("keydown", e => {
 
 /* ---------------- Палитры на странице ---------------- */
 const gridG = createGrid($("#gameGrid"), { pick: pickCell });
-const DEMO = board("m"), DEMO_TARGET = 5 * DEMO.cols + 2, DEMO_START = 6 * DEMO.cols + 3;
+const DEMO = board("m"), DEMO_TARGET = 3 * DEMO.cols + 2, DEMO_START = 4 * DEMO.cols + 3;
 let demoSel = DEMO_START;
 const demoG = createGrid($("#demoGrid"), {
   pick(c) {

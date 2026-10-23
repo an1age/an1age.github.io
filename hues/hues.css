@@ -6,7 +6,7 @@
 /* Палитра */
 .grid{position:relative;border-radius:10px;padding:3px;background:var(--rim);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y}
 .grid.is-live{touch-action:none;cursor:crosshair}
-.cells{display:grid;grid-template-columns:repeat(var(--cols, 24), 1fr);grid-template-rows:repeat(var(--rows, 14), 1fr);aspect-ratio:var(--gw, 1.49);border-radius:7px;overflow:hidden}
+.cells{display:grid;grid-template-columns:repeat(var(--cols, 24), 1fr);grid-template-rows:repeat(var(--rows, 14), 1fr);aspect-ratio:var(--gw, 1.49);gap:1px;background:var(--rim);border-radius:7px;overflow:hidden}
 .cells i{display:block;min-width:0;min-height:0}
 .marks{position:absolute;inset:3px;pointer-events:none;container-type:inline-size}
 .grid.is-live .cells i:hover{box-shadow:inset 0 0 0 2px var(--needle), inset 0 0 0 3px var(--needle-edge)}
@@ -16,6 +16,10 @@
 .ax-top span{transform:translateX(-50%)}
 .ax-left{top:3px;bottom:3px;left:-20px;width:14px}
 .ax-left span{right:0;transform:translateY(-50%)}
+.ax-bottom{left:3px;right:3px;bottom:-16px;height:12px}
+.ax-bottom span{transform:translateX(-50%)}
+.ax-right{top:3px;bottom:3px;right:-20px;width:14px}
+.ax-right span{left:0;transform:translateY(-50%)}
 .frame{position:absolute;border:2.5px solid var(--needle);box-shadow:0 0 0 1.5px var(--needle-edge), inset 0 0 0 1.5px var(--needle-edge);border-radius:4px}
 .frame.is-outer{border-style:dashed;border-width:2px;box-shadow:none;opacity:.85}
 .tgt{position:absolute;border:3px solid var(--needle-edge);box-shadow:0 0 0 2px var(--needle);border-radius:3px}
@@ -140,7 +144,8 @@
   #gPlayers{display:none}
   .keys-hint{display:block}
   .foot{justify-content:flex-start}
-  .grid{margin:18px 0 0 22px;max-width:calc((100vh - 230px) * var(--gw, 1.5));width:calc(100% - 22px)}
+  .grid{margin:18px 22px;max-width:calc((100vh - 250px) * var(--gw, 1.5));width:calc(100% - 44px)}
+  .cells{gap:2px}
   .ax{display:block}
   .clues{flex-direction:row;justify-content:center;align-items:baseline;gap:18px;flex-wrap:wrap}
 }
