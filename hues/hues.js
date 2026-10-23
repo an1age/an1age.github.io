@@ -84,16 +84,17 @@ const TEAMS = ["Акварель", "Гуашь"];
 const TEAM_SHORT = ["АК", "ГУ"];
 const RULES = {
   solo: [
-    "Каждый играет сам за себя. Ведущий по очереди выбирает цвет и даёт подсказку в одно слово, все тайно ставят фишку. Потом фишки открываются, ведущий даёт вторую подсказку до двух слов, и все ставят ещё по фишке.",
+    "Каждый играет сам за себя. Ведущий по очереди выбирает цвет и даёт подсказку — хоть одно слово, хоть целую историю, — все тайно ставят фишку. Потом фишки открываются, ведущий даёт вторую подсказку, и все ставят ещё по фишке.",
     "Точно в цвет — <b>3</b>, в рамке 3×3 вокруг — <b>2</b>, на клетку дальше рамки — <b>1</b>. Ведущий получает <b>+1</b> за каждую фишку в рамке 3×3."
   ],
   teams: [
-    "Команды ходят по очереди. Ведущий даёт подсказку в одно слово, его команда двигает одну общую фишку: сдвинуть её может каждый, а встанет она, когда все нажмут «Согласен». Потом вторая подсказка до двух слов и вторая фишка.",
+    "Команды ходят по очереди. Ведущий даёт подсказку — хоть одно слово, хоть целую историю, — его команда двигает одну общую фишку: сдвинуть её может каждый, а встанет она, когда все нажмут «Согласен». Потом вторая подсказка и вторая фишка.",
     "Затем соперники ставят общую фишку-перехват: если она ближе к цвету, чем обе фишки команды, соперникам <b>+1</b>. Фишки команды: точно в цвет — <b>3</b>, в рамке 3×3 — <b>2</b>, на клетку дальше — <b>1</b>. Ходов у команд поровну."
   ]
 };
 const PCOLORS = ["#E4572E", "#2B67C6", "#2F8F5B", "#A93A88", "#E8A317", "#139C9A", "#7B4EA3", "#8C6A43", "#D81E5B", "#4C6085"];
 const MIN_LAPS = 1, MAX_LAPS = 30;
+const CLUE_MAX = 400; /* Сколько слов в подсказке — не ограничиваем, хоть целая история; только длина в символах */
 
 /* ---------------- Утилиты ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -303,10 +304,9 @@ function drawCard(G) {
   while (out.length < 4) out.push(rnd(BD.cells));
   return out;
 }
-function clueProblem(text, max) {
+function clueProblem(text) {
   const w = words(text);
   if (!w.length) return "Напишите подсказку";
-  if (w.length > max) return max === 1 ? "Первая подсказка — одно слово" : "Вторая подсказка — не больше двух слов";
   if (w.some(x => BANNED.test(x.replace(/[^\p{L}-]/gu, "")))) return "Основные цвета называть нельзя";
   return "";
 }
@@ -794,7 +794,7 @@ const ACT = {
   submitClue1() {
     const G = S.game; if (!G || !G.round || G.round.phase !== "think" || G.round.giver !== S.uid) return;
     if (!S.ui.card || S.ui.cardKey !== rKey(G)) return;
-    const clue = words(S.drafts.clue).join(" ").slice(0, 30), bad = clueProblem(clue, 1);
+    const clue = words(S.drafts.clue).join(" ").slice(0, CLUE_MAX), bad = clueProblem(clue);
     if (bad) return toast(bad);
     saveSecret(rKey(G), S.ui.card[S.ui.pick]);
     S.drafts.clue = "";
@@ -802,7 +802,7 @@ const ACT = {
   },
   submitClue2() {
     const G = S.game; if (!G || !G.round || G.round.phase !== "clue2" || G.round.giver !== S.uid) return;
-    const clue = words(S.drafts.clue).join(" ").slice(0, 40), bad = clueProblem(clue, 2);
+    const clue = words(S.drafts.clue).join(" ").slice(0, CLUE_MAX), bad = clueProblem(clue);
     if (bad) return toast(bad);
     S.drafts.clue = "";
     commit({ round: { clue2: clue, phase: "guess2", sel: null, votes: null, force: null } });
@@ -866,7 +866,7 @@ function setHTML(el, html) {
   if (a && a.id && el.contains(a)) { fid = a.id; try { s0 = a.selectionStart; s1 = a.selectionEnd; } catch {} }
   el.innerHTML = html;
   el._h = html;
-  for (const inp of el.querySelectorAll("input[data-draft]")) { const v = S.drafts[inp.dataset.draft]; if (v != null) inp.value = v; }
+  for (const inp of el.querySelectorAll("[data-draft]")) { const v = S.drafts[inp.dataset.draft]; if (v != null) inp.value = v; }
   if (fid) {
     const n = document.getElementById(fid);
     if (n) { try { n.focus({ preventScroll: true }); if (s0 != null) n.setSelectionRange(s0, s1); } catch {} }
@@ -1069,8 +1069,8 @@ function renderGame() {
   setHTML($("#gHead"), `<div class="eyebrow">Раунд ${r.n} из ${G.rounds}${teams ? ` · ход ${teamName(r.team)}` : ""}</div><div class="who">Ведущий: <b>${giver ? "вы" : esc(nameOf(r.giver))}</b></div>`);
 
   let clues = "";
-  if (r.clue1) clues += `<div class="clue${r.clue2 ? " is-old" : ""}"><small>Подсказка 1</small>«${esc(r.clue1)}»</div>`;
-  if (r.clue2) clues += `<div class="clue"><small>Подсказка 2</small>«${esc(r.clue2)}»</div>`;
+  if (r.clue1) clues += `<div class="clue${r.clue2 ? " is-old" : ""}${clueLong(r.clue1)}"><small>Подсказка 1</small>«${esc(r.clue1)}»</div>`;
+  if (r.clue2) clues += `<div class="clue${clueLong(r.clue2)}"><small>Подсказка 2</small>«${esc(r.clue2)}»</div>`;
   setHTML($("#gClue"), clues);
   $("#gClue").hidden = !clues;
 
@@ -1111,15 +1111,18 @@ function pickbarHTML(G, sel) {
 }
 const dpad = (act, label, primary, disabled) => `<div class="row dpad"><button class="btn" type="button" data-act="nudge" data-arg="l" aria-label="Левее">←</button><button class="btn" type="button" data-act="nudge" data-arg="u" aria-label="Выше">↑</button><button class="btn${primary ? " btn-primary" : ""} grow" type="button" data-act="${act}"${disabled ? " disabled" : ""}>${label}</button><button class="btn" type="button" data-act="nudge" data-arg="d" aria-label="Ниже">↓</button><button class="btn" type="button" data-act="nudge" data-arg="r" aria-label="Правее">→</button></div>`;
 const keysHint = `<p class="status keys-hint">Стрелки на клавиатуре двигают фишку, Enter — подтвердить.</p>`;
+/* Поле подсказки растёт вместе с текстом; Enter отправляет */
+const clueInput = ph => `<textarea id="clueInput" class="clue-input" data-draft="clue" rows="2" maxlength="${CLUE_MAX}" autocomplete="off" placeholder="${ph}"></textarea>`;
+const clueLong = c => String(c || "").length > 28 ? " is-long" : "";
 function thinkHTML(G) {
   const r = G.round, k = rKey(G);
   if (r.giver !== S.uid) return giverAway(G, `<b>${esc(nameOf(r.giver))}</b>${isTeams(G) ? ` (${teamName(r.team)})` : ""} выбирает цвет и придумывает подсказку<span class="dots"></span>`);
   if (!S.ui.card || S.ui.cardKey !== k) return msg("Вы ведущий. Проверьте, что экран никто не видит, и возьмите карточку.")
     + `<button class="btn btn-primary btn-block" type="button" data-act="draw">Взять карточку</button>`;
-  const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue, 1) : "";
-  return msg("Выберите один из четырёх цветов — он отмечен на палитре — и опишите его одним словом. Основные цвета называть нельзя.")
+  const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue) : "";
+  return msg("Выберите один из четырёх цветов — он отмечен на палитре — и опишите его: одним словом или целой историей. Основные цвета называть нельзя.")
     + `<div class="card" role="group" aria-label="Карточка">${S.ui.card.map((c, i) => `<button type="button" data-act="pick" data-arg="${i}" aria-pressed="${S.ui.pick === i}">${sw(c)}<span>${i + 1} · ${cellName(c)}</span></button>`).join("")}</div>
-    <div class="field"><label for="clueInput">Подсказка — одно слово</label><input id="clueInput" data-draft="clue" type="text" maxlength="30" autocomplete="off" placeholder="Например: мандарин"></div>
+    <div class="field"><label for="clueInput">Подсказка</label>${clueInput("Например: мандарин")}</div>
     <p class="status" id="clueWarn">${esc(bad)}</p>
     <button class="btn btn-primary btn-block" id="clueSubmit" type="button" data-act="submitClue1"${S.drafts.clue.trim() && !bad ? "" : " disabled"}>Отправить подсказку</button>
     <button class="btn-quiet" type="button" data-act="draw">Другая карточка</button>`;
@@ -1127,9 +1130,9 @@ function thinkHTML(G) {
 function clue2HTML(G, waitText) {
   const r = G.round;
   if (r.giver !== S.uid) return giverAway(G, waitText);
-  const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue, 2) : "";
-  return msg("Дайте вторую подсказку — не больше двух слов, — чтобы подвести ближе к цвету.")
-    + `<div class="field"><label for="clueInput">Подсказка — до двух слов</label><input id="clueInput" data-draft="clue" type="text" maxlength="40" autocomplete="off" placeholder="Например: спелый апельсин"></div>
+  const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue) : "";
+  return msg("Дайте вторую подсказку, чтобы подвести ближе к цвету.")
+    + `<div class="field"><label for="clueInput">Вторая подсказка</label>${clueInput("Например: спелый апельсин")}</div>
     <p class="status" id="clueWarn">${esc(bad)}</p>
     <button class="btn btn-primary btn-block" id="clueSubmit" type="button" data-act="submitClue2"${S.drafts.clue.trim() && !bad ? "" : " disabled"}>Отправить подсказку</button>`;
 }
@@ -1257,7 +1260,7 @@ async function keepAwake(on) {
 function updateClueBtn() {
   const b = $("#clueSubmit"), w = $("#clueWarn"), r = S.game && S.game.round;
   if (!b || !r) return;
-  const text = S.drafts.clue.trim(), bad = text ? clueProblem(text, r.phase === "clue2" ? 2 : 1) : "";
+  const text = S.drafts.clue.trim(), bad = text ? clueProblem(text) : "";
   b.disabled = !text || !!bad;
   if (w) w.textContent = bad;
 }
@@ -1287,7 +1290,7 @@ document.addEventListener("keydown", e => {
     if (e.key !== "Enter") return;
     const id = t.id, r = S.game && S.game.round;
     if (id === "codeInput") ACT.join();
-    else if (id === "clueInput") { if (r && r.phase === "clue2") ACT.submitClue2(); else ACT.submitClue1(); }
+    else if (id === "clueInput") { e.preventDefault(); if (r && r.phase === "clue2") ACT.submitClue2(); else ACT.submitClue1(); }
     else if (id === "lobbyNick") ACT.saveNick();
     else if (id === "homeNick") { if (S.hashCode) ACT.joinRoom(S.hashCode); else ACT.create(); }
     return;
