@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Оттенки</title>
+<meta name="description" content="Игра про цвета и ассоциации: ведущий видит цвет на палитре и даёт подсказку в одно слово, остальные ставят фишки.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Unbounded:wght@600;800&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="hues.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <button class="brand" type="button" data-act="home" aria-label="Оттенки — на главную игры">
+      <svg viewBox="0 0 40 24" aria-hidden="true"><rect class="logo-a" x="2" y="2" width="11" height="9" rx="2"/><rect class="logo-b" x="15" y="2" width="11" height="9" rx="2"/><rect class="logo-c" x="28" y="2" width="11" height="9" rx="2"/><rect class="logo-c" x="2" y="13" width="11" height="9" rx="2"/><rect class="logo-a" x="15" y="13" width="11" height="9" rx="2"/><rect class="logo-b" x="28" y="13" width="11" height="9" rx="2"/><rect class="logo-frame" x="13.5" y="0.8" width="14" height="11.4" rx="3"/></svg>
+      <span class="wordmark">Оттенки</span>
+    </button>
+    <div id="topRight" class="top-right"></div>
+  </header>
+
+  <main>
+    <section id="vHome" class="view">
+      <div class="hero">
+        <a class="back-link" href="../">← Все игры</a>
+        <div class="eyebrow">Игра про цвета · от 2 игроков</div>
+        <h1>Оттенки</h1>
+        <p class="lead">Ведущий видит цвет на большой палитре и описывает его одним словом. Остальные ставят фишки туда, где, по их мнению, этот цвет. Чем ближе, тем больше очков.</p>
+      </div>
+      <figure class="demo">
+        <div id="demoGrid" class="grid"></div>
+        <figcaption class="demo-cap"><span>Подсказка: <b>«Мандарин»</b>. Нажмите на клетку.</span><span id="demoScore" class="demo-score">2 очка</span></figcaption>
+      </figure>
+      <ol class="steps">
+        <li><span>Ведущий берёт карточку с четырьмя цветами и выбирает один. Его видит только он.</span></li>
+        <li><span>Он даёт подсказку в одно слово. Называть основные цвета нельзя: «красный», «синий» и так далее.</span></li>
+        <li><span>Каждый тайно ставит фишку. Потом все фишки открываются, ведущий даёт вторую подсказку, уже до двух слов, и все ставят ещё по фишке.</span></li>
+        <li><span>Точно в цвет — 3 очка, в рамке 3×3 вокруг — 2, на клетку дальше — 1. Ведущий получает очко за каждую фишку в рамке.</span></li>
+      </ol>
+      <div class="panel panel-online"><h2>Играть онлайн</h2><div id="homeOnline" class="stack"></div></div>
+    </section>
+
+    <section id="vLobby" class="view" hidden></section>
+
+    <section id="vGame" class="view" hidden>
+      <div id="gHead" class="g-head"></div>
+      <div id="gClue" class="clues"></div>
+      <div id="gameGrid" class="grid"></div>
+      <div id="gPanel" class="g-panel"></div>
+      <div id="gPlayers"></div>
+      <div id="gFoot" class="foot"></div>
+    </section>
+
+    <section id="vOver" class="view" hidden></section>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="../assets/firebase.js"></script>
+<script src="hues.js"></script>
+</body>
+</html>
