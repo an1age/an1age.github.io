@@ -55,15 +55,16 @@ const TEAM_SHORT = ["ДВ", "КВ"];
 const MODE_NAMES = { coop: "Вместе", teams: "Команды", solo: "Сам за себя" };
 const RULES = {
   coop: "Все играют вместе против шкалы. Стрелку двигают сообща, а фиксируется она, когда все нажали «Согласен». Экстрасенс меняется каждый раунд, очки общие.",
-  teams: "Две команды ходят по очереди. Команда двигает стрелку и голосует «Согласен». Потом соперники договариваются, где цель: левее или правее стрелки — угадали, +1 очко. Побеждает команда, первой набравшая 10. Попали в «4», но всё ещё отстаёте — ходите ещё раз.",
-  solo: "У каждого своя стрелка, и её никто не видит до открытия шторки. Каждый получает очки за свою стрелку, а экстрасенс — +1 за каждого игрока, который попал в зону с очками."
+  teams: "Две команды ходят по очереди. Команда двигает стрелку и голосует «Согласен». Потом соперники договариваются, где цель: левее или правее стрелки — угадали, +1 очко. Побеждает команда, первой набравшая {goal}. Попали в «4», но всё ещё отстаёте — ходите ещё раз.",
+  solo: "У каждого своя стрелка. Пока игроки думают, их стрелки видит только экстрасенс, остальные — после открытия шторки. Каждый получает очки за свою стрелку, а экстрасенс — +1 за каждого игрока, который попал в зону с очками."
 };
 const RULES_LOCAL = {
   coop: "Все играют вместе против шкалы. Экстрасенс меняется каждый раунд, очки складываются, в конце — звание команды.",
-  teams: "Две команды ходят по очереди. Когда одна поставила стрелку, другая угадывает, где цель — левее или правее: это ещё +1 очко. Побеждает команда, первой набравшая 10. Попали в «4», но всё ещё отстаёте — ходите ещё раз."
+  teams: "Две команды ходят по очереди. Когда одна поставила стрелку, другая угадывает, где цель — левее или правее: это ещё +1 очко. Побеждает команда, первой набравшая {goal}. Попали в «4», но всё ещё отстаёте — ходите ещё раз."
 };
 const PCOLORS = ["#F8F3E6", "#22D3EE", "#A78BFA", "#A3E635", "#F472B6", "#60A5FA", "#34D399", "#E879F9"];
 const MIN_ROUNDS = 1, MAX_ROUNDS = 30;
+const MIN_GOAL = 3, MAX_GOAL = 30;
 
 /* ---------------- Утилиты ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -274,7 +275,7 @@ function createDial(svg, uid) {
     marksKey = key;
     while (marks.firstChild) marks.removeChild(marks.firstChild);
     (list || []).forEach(m => {
-      const g = el("g", {}, marks);
+      const g = el("g", m.draft ? { class: "d-mark is-draft" } : { class: "d-mark" }, marks);
       el("line", { x1: cx, y1: cy, x2: cx, y2: cy - R + 8, class: "d-needle-shadow" }, g);
       el("line", { x1: cx, y1: cy, x2: cx, y2: cy - R + 8, stroke: m.color, "stroke-width": 3.5, "stroke-linecap": "round" }, g);
       el("circle", { cx, cy: cy - R + 16, r: 9, fill: m.color, class: "d-mark-knob" }, g);
@@ -409,6 +410,7 @@ const S = {
   roomOk: false, online: new Set(), unsub: [],
   local: null, secret: null, loadingSecret: null, secretChecked: null,
   needle: null, lastDbNeedle: null, needleTimer: null, pendingNeedle: null, liveNeedle: null, liveTimer: null,
+  soloLive: {}, soloMine: null, soloTimer: null,
   myGuess: null, revealKey: null, sideKey: null, advKey: null, localRevealT: null,
   view: null, wake: null, hashCode: null,
   ui: { peek: false, spinningKey: null, pair: null, pairKey: null, pick: 0, confirm: null },
@@ -559,6 +561,14 @@ function pushLiveNeedle(n, v) {
     if (S.mode === "online" && S.db && S.code && S.liveNeedle) S.db.ref(`rooms/${S.code}/needle`).set(S.liveNeedle).catch(() => {});
   }, 80);
 }
+function pushSoloLive(n, v) {
+  S.soloMine = { n, v: r1(v) };
+  if (S.soloTimer) return;
+  S.soloTimer = setTimeout(() => {
+    S.soloTimer = null;
+    if (S.mode === "online" && S.db && S.code && S.soloMine) S.db.ref(`rooms/${S.code}/needle/s/${S.uid}`).set(S.soloMine).catch(() => {});
+  }, 80);
+}
 function displayedNeedle(G) {
   const r = G.round;
   if (S.mode === "online" && r.phase === "guess" && S.needle && S.needle.n === r.n) return S.needle.v;
@@ -647,7 +657,7 @@ async function joinRoom(code) {
 }
 function enterRoom(code) {
   leaveSubs();
-  Object.assign(S, { mode: "online", code, game: null, players: [], playersRaw: {}, needle: null, lastDbNeedle: null, online: new Set(), roomOk: true });
+  Object.assign(S, { mode: "online", code, game: null, players: [], playersRaw: {}, needle: null, lastDbNeedle: null, soloLive: {}, online: new Set(), roomOk: true });
   resetRoundUI();
   store.set("wl.room", code);
   const base = S.db.ref("rooms/" + code);
@@ -669,7 +679,11 @@ function enterRoom(code) {
   });
   listen(base.child("needle"), snap => {
     const v = snap.val(), G = S.game, r = G && G.round;
-    if (S.code !== code || !v || v.by === S.uid || !r || r.phase !== "guess" || G.mode === "solo" || v.n !== r.n || typeof v.v !== "number") return;
+    if (S.code !== code) return;
+    /* «Сам за себя»: стрелки игроков, пока они думают, — их видит только экстрасенс */
+    S.soloLive = v && isObj(v.s) ? v.s : {};
+    if (G && G.mode === "solo" && r && r.phase === "guess" && r.psychic === S.uid) render();
+    if (!v || v.by === S.uid || !r || r.phase !== "guess" || G.mode === "solo" || v.n !== r.n || typeof v.v !== "number") return;
     S.needle = { n: r.n, v: clamp(v.v, 0, 100) };
     render();
   });
@@ -750,6 +764,7 @@ function leaveSubs() {
   S.unsub = [];
   S.roomOk = false;
   clearTimeout(S.liveTimer); S.liveTimer = null;
+  clearTimeout(S.soloTimer); S.soloTimer = null;
   clearTimeout(S.needleTimer); S.needleTimer = null;
 }
 function exitOnline() {
@@ -766,6 +781,7 @@ async function leaveRoom() {
     await S.db.ref().update({
       [`rooms/${code}/players/${uid}`]: null,
       [`rooms/${code}/game/teams/${uid}`]: null,
+      [`rooms/${code}/needle/s/${uid}`]: null,
       [`lobby/${code}/online/${uid}`]: null
     });
     const rest = await S.db.ref(`rooms/${code}/players`).get();
@@ -876,6 +892,11 @@ const ACT = {
     const n = clamp((G.rounds || 7) + (+arg || 0), MIN_ROUNDS, MAX_ROUNDS);
     if (n !== G.rounds) commit({ rounds: n });
   },
+  goal(arg) {
+    const G = G_(); if (!G || G.status !== "lobby" || !isAdmin(G)) return;
+    const n = clamp((G.goal || 10) + (+arg || 0), MIN_GOAL, MAX_GOAL);
+    if (n !== G.goal) commit({ goal: n });
+  },
   start() {
     const G = G_(); if (!G || G.status !== "lobby" || !isAdmin(G)) return;
     const online = S.mode === "online";
@@ -956,7 +977,7 @@ const ACT = {
     if (G.mode === "solo") {
       if (r.guesses && typeof r.guesses[S.uid] === "number") return;
       const v = clamp(r1(myGuessVal(r) + d), 0, 100);
-      S.myGuess = { n: r.n, v }; dialG.setNeedle(v, true); return;
+      S.myGuess = { n: r.n, v }; pushSoloLive(r.n, v); dialG.setNeedle(v, true); return;
     }
     const v = clamp(r1(displayedNeedle(G) + d), 0, 100);
     S.needle = { n: r.n, v }; pushLiveNeedle(r.n, v); queueNeedleWrite(v);
@@ -989,7 +1010,9 @@ const ACT = {
   },
   guessDone() {
     const G = G_(); if (!G || G.mode !== "solo" || G.round.phase !== "guess") return;
-    commit({ round: { guesses: { [S.uid]: r1(myGuessVal(G.round)) } } });
+    const v = r1(myGuessVal(G.round));
+    pushSoloLive(G.round.n, v);
+    commit({ round: { guesses: { [S.uid]: v } } });
   },
   guessEdit() {
     const G = G_(); if (!G || G.mode !== "solo" || G.round.phase !== "guess") return;
@@ -1053,6 +1076,8 @@ function show(view) {
 const msg = html => `<p class="msg">${html}</p>`;
 const segBtn = (act, arg, label, on) => `<button type="button" data-act="${act}" data-arg="${esc(arg)}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
 const stepper = n => `<div class="stepper" role="group" aria-label="Количество раундов"><button type="button" data-act="rounds" data-arg="-1" aria-label="Меньше раундов"${n <= MIN_ROUNDS ? " disabled" : ""}>−</button><output aria-live="polite">${n}</output><button type="button" data-act="rounds" data-arg="1" aria-label="Больше раундов"${n >= MAX_ROUNDS ? " disabled" : ""}>+</button></div>`;
+const goalStepper = n => `<div class="stepper" role="group" aria-label="Очков до победы"><button type="button" data-act="goal" data-arg="-1" aria-label="Меньше очков"${n <= MIN_GOAL ? " disabled" : ""}>−</button><output aria-live="polite">${n}</output><button type="button" data-act="goal" data-arg="1" aria-label="Больше очков"${n >= MAX_GOAL ? " disabled" : ""}>+</button></div>`;
+const rulesText = (rules, G) => (rules[G.mode] || rules.coop).replace("{goal}", G.goal || 10);
 
 function render() {
   try {
@@ -1138,8 +1163,8 @@ function renderSetup() {
     <div class="panel">
       <h2>Режим</h2>
       <div class="seg" role="group" aria-label="Режим">${segBtn("setMode", "coop", "Вместе", !teams)}${segBtn("setMode", "teams", "Две команды", teams)}</div>
-      ${msg(RULES_LOCAL[G.mode] || RULES_LOCAL.coop)}
-      ${teams ? "" : `<div class="setting"><span class="label">Сколько раундов</span>${stepper(G.rounds)}</div>`}
+      ${msg(rulesText(RULES_LOCAL, G))}
+      ${teams ? `<div class="setting"><span class="label">Очков до победы</span>${goalStepper(G.goal || 10)}</div>` : `<div class="setting"><span class="label">Сколько раундов</span>${stepper(G.rounds)}</div>`}
     </div>
     <button class="btn btn-primary btn-block" type="button" data-act="start">Начать игру</button>
     <button class="btn-quiet" type="button" data-act="menu">Назад</button>`);
@@ -1180,7 +1205,9 @@ function renderLobby() {
     ? `<div class="teams">${[0, 1].map(t => { const mem = teamMembers(S.players, t); return `<div class="team t${t}"><div class="team-name"><span class="tdot"></span>${TEAMS[t]}</div>${mem.map(p => plChip(p, G)).join("") || `<span class="msg small">пока никого</span>`}</div>`; }).join("")}</div>
        <div class="row"><button class="btn" type="button" data-act="switchTeam"${myPlayer() ? "" : " disabled"}>Сменить команду</button>${admin ? `<button class="btn" type="button" data-act="shuffle">Перемешать</button>` : ""}</div>`
     : `<div class="players">${players.map(p => plChip(p, G)).join("")}</div>`;
-  const roundsBlock = teams ? "" : (admin
+  const roundsBlock = teams ? (admin
+    ? `<div class="setting"><span class="label">Очков до победы</span>${goalStepper(G.goal)}</div>`
+    : `<p class="msg">Игра до <b>${G.goal}</b> ${plural(G.goal, "очка", "очков", "очков")}</p>`) : (admin
     ? `<div class="setting"><span class="label">Сколько раундов</span>${stepper(G.rounds)}</div>`
     : `<p class="msg">Раундов: <b>${G.rounds}</b></p>`)
     + (mode === "solo" && players.length > 1 && G.rounds % players.length !== 0 ? `<p class="msg small">Чтобы каждый побыл экстрасенсом поровну, возьмите число раундов, кратное числу игроков (${players.length}).</p>` : "");
@@ -1202,7 +1229,7 @@ function renderLobby() {
       ${admin
         ? `<div class="seg" role="group" aria-label="Режим">${["coop", "teams", "solo"].map(m => segBtn("setMode", m, MODE_NAMES[m], mode === m)).join("")}</div>`
         : `<p class="mode-name">${MODE_NAMES[mode]}</p>`}
-      ${msg(RULES[mode])}
+      ${msg(rulesText(RULES, Object.assign({}, G, { mode })))}
       ${roundsBlock}
       ${admin ? "" : `<p class="msg small">Настройки меняет админ — ${esc(adminName)}.</p>`}
     </div>
@@ -1227,6 +1254,17 @@ function spectrumHTML(spec) {
   if (!spec) return `<div class="spectrum is-empty"><div class="spec-l">← ?</div><div class="spec-r">? →</div></div>`;
   return `<div class="spectrum"><div class="spec-l">← ${esc(spec[0] || "…")}</div><div class="spec-r">${esc(spec[1] || "…")} →</div></div>`;
 }
+/* Стрелки игроков для экстрасенса: принятый ответ — ярко, ещё двигают — бледно */
+function soloMarks(G) {
+  const r = G.round, out = [];
+  for (const u of guessersOf(G)) {
+    const done = r.guesses && typeof r.guesses[u] === "number" ? r.guesses[u] : null;
+    const live = S.soloLive[u];
+    if (done != null) out.push({ v: done, color: colorOf(u) });
+    else if (live && live.n === r.n && typeof live.v === "number") out.push({ v: clamp(live.v, 0, 100), color: colorOf(u), draft: true });
+  }
+  return out;
+}
 function renderGame() {
   show("vGame");
   const G = G_(), r = G.round, online = S.mode === "online", solo = G.mode === "solo";
@@ -1238,7 +1276,7 @@ function renderGame() {
   const spinning = S.ui.spinningKey === k;
   const st = online ? roundStatus(G) : null;
 
-  setHTML($("#gHead"), `<div><div class="eyebrow">Раунд ${r.n}${G.mode !== "teams" ? ` из ${G.rounds}` : ` · ход команды «${TEAMS[r.team]}»`}</div></div>`
+  setHTML($("#gHead"), `<div><div class="eyebrow">Раунд ${r.n}${G.mode !== "teams" ? ` из ${G.rounds}` : ` · до ${G.goal} · ход команды «${TEAMS[r.team]}»`}</div></div>`
     + (online ? `<div class="who">Экстрасенс: <b>${r.psychic === S.uid ? "вы" : esc(nameOf(r.psychic))}</b></div>` : ""));
 
   /* Шкала */
@@ -1249,6 +1287,7 @@ function renderGame() {
     else needle = r.needle;
   } else if (online) {
     if (role.psy && secret != null) { open = true; target = secret; }
+    if (solo && role.psy && r.phase === "guess") marks = soloMarks(G);
     if (solo) {
       if (r.phase === "guess" && role.guess) {
         const mine = r.guesses && typeof r.guesses[S.uid] === "number" ? r.guesses[S.uid] : null;
@@ -1334,11 +1373,11 @@ function panelHTML(G, role, secret, spinning, st) {
       const stat = `<p class="status">Ответили <b>${st.done.length} из ${st.req.length}</b></p>`;
       if (st.ready) return openingMsg(G, "Все ответили.");
       const force = isAdmin(G) && st.done.length > 0 && !r.force ? `<button class="btn-quiet" type="button" data-act="force">Не ждать остальных</button>` : "";
-      if (role.psy) return msg("Игроки ставят свои стрелки. Их положение откроется вместе со шторкой.") + stat + force;
+      if (role.psy) return msg("Игроки ставят свои стрелки, и вы видите их вживую: бледная — ещё думает, яркая — ответ принят. Остальные увидят стрелки, когда откроется шторка.") + stat + force;
       if (!role.guess) return msg("Игроки ставят стрелки.") + stat + force;
       const mine = r.guesses && typeof r.guesses[S.uid] === "number";
-      if (mine) return msg("Ответ принят. Ждём остальных — все стрелки появятся вместе со шторкой.") + stat + `<button class="btn btn-block" type="button" data-act="guessEdit">Изменить ответ</button>` + force;
-      return msg("Поставьте свою стрелку туда, куда указывает подсказка. До открытия шторки её никто не увидит.") + nudgeRow("guessDone", "Готово", true) + stat + force;
+      if (mine) return msg("Ответ принят. Ждём остальных — все стрелки появятся у всех вместе со шторкой.") + stat + `<button class="btn btn-block" type="button" data-act="guessEdit">Изменить ответ</button>` + force;
+      return msg("Поставьте свою стрелку туда, куда указывает подсказка. До открытия шторки её видит только экстрасенс.") + nudgeRow("guessDone", "Готово", true) + stat + force;
     }
     const stat = `<p class="status">Согласны <b>${st.done.length} из ${st.req.length}</b></p>`;
     if (st.ready) return teams ? msg(`Команда договорилась. Теперь слово соперникам<span class="dots"></span>`) : openingMsg(G, "Все согласны.");
@@ -1489,7 +1528,7 @@ dialG.setInteractive(false, {
   input(v) {
     const G = G_(); if (!G || !G.round || G.round.phase !== "guess") return;
     if (S.mode === "local") { G.round.needle = r1(v); return; }
-    if (G.mode === "solo") { S.myGuess = { n: G.round.n, v: r1(v) }; return; }
+    if (G.mode === "solo") { S.myGuess = { n: G.round.n, v: r1(v) }; pushSoloLive(G.round.n, v); return; }
     if (!S.dragCleared) { S.dragCleared = true; clearVotesNow(); }
     S.needle = { n: G.round.n, v }; pushLiveNeedle(G.round.n, v);
   },
@@ -1498,7 +1537,7 @@ dialG.setInteractive(false, {
     const G = G_(); if (!G || !G.round || G.round.phase !== "guess") return;
     v = r1(v);
     if (S.mode === "local") { G.round.needle = v; saveLocal(); return; }
-    if (G.mode === "solo") { S.myGuess = { n: G.round.n, v }; return; }
+    if (G.mode === "solo") { S.myGuess = { n: G.round.n, v }; pushSoloLive(G.round.n, v); return; }
     S.needle = { n: G.round.n, v }; pushLiveNeedle(G.round.n, v); queueNeedleWrite(v);
   }
 });

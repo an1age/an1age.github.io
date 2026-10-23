@@ -147,8 +147,12 @@ async def main():
             await spin_and_clue(A, "мурлыканье", pick=1)
             await B.wait_for_selector("[data-act=guessDone]")
             for _ in range(10): await B.click("[data-act=nudge][data-arg='-1']")
+            await A.wait_for_timeout(400)
+            check(await count(A, "#gameDial .d-mark.is-draft") == 1, "экстрасенс видит стрелку Бориса, пока тот думает")
+            check(await count(C, "#gameDial .d-mark") == 0, "Вика не видит стрелку Бориса")
             await B.click("[data-act=guessDone]")
             await C.wait_for_timeout(400)
+            check(await count(A, "#gameDial .d-mark") == 1 and await count(A, "#gameDial .d-mark.is-draft") == 0, "ответ Бориса принят — у экстрасенса стрелка яркая")
             check("Ответили 1 из 2" in await txt(C, "#gPanel"), "ответ Бориса засчитан, значение скрыто")
             check(await C.get_attribute("#gameDial", "aria-valuenow") == "50", "у Вики своя стрелка, чужая не видна")
             for _ in range(12): await C.click("[data-act=nudge][data-arg='1']")
@@ -185,6 +189,10 @@ async def main():
             await A.click("[data-act=setMode][data-arg=teams]")
             await join(D, "Гоша", code3)
             await A.wait_for_selector("text=Игроки · 4")
+            check(await count(A, "[data-act=goal]") == 2 and await count(B, "[data-act=goal]") == 0, "очки до победы меняет только админ")
+            await A.click("[data-act=goal][data-arg='-1']")
+            await B.wait_for_selector("text=Игра до 9 очков")
+            check("набравшая 9" in await txt(B, "#vLobby"), "очки до победы: 10 → 9 видно у игрока и в правилах")
             await A.click("[data-act=shuffle]")
             await A.wait_for_timeout(400)
             await A.click("[data-act=start]")
@@ -195,6 +203,7 @@ async def main():
             if psy is None:
                 for i, pg in enumerate(pages):
                     print("   стр.", i, await pg.evaluate("document.querySelector('main section:not([hidden])')?.id"), (await txt(pg, "#gPanel"))[:90], "|", (await txt(pg, "#vLobby"))[:120] if await pg.is_visible("#vLobby") else "")
+            check("ДО 9" in (await txt(B, "#gHead")).upper(), "в шапке раунда видно, до скольких очков игра")
             await spin_and_clue(psy, "кофе")
             await A.wait_for_timeout(500)
             voters = [pg for pg in pages if await count(pg, "[data-act=vote]")]
