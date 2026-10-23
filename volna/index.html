@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Поймай волну</title>
+<meta name="description" content="Игра на чтение мыслей: экстрасенс видит цель на шкале и даёт подсказку, остальные ставят стрелку.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Unbounded:wght@600;800&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="volna.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <button class="brand" type="button" data-act="home" aria-label="Поймай волну — на главную игры">
+      <svg viewBox="0 0 40 24" aria-hidden="true"><path class="logo-face" d="M3 22 A17 17 0 0 1 37 22 Z"/><path class="logo-needle" d="M20 22 L27.5 9"/><circle class="logo-hub" cx="20" cy="22" r="2.6"/></svg>
+      <span class="wordmark">Поймай волну</span>
+    </button>
+    <div id="topRight" class="top-right"></div>
+  </header>
+
+    <main>
+    <section id="vHome" class="view">
+      <div class="hero">
+        <a class="back-link" href="../">← Все игры</a>
+        <div class="eyebrow">Игра на чтение мыслей · от 2 игроков</div>
+        <h1>Поймай волну</h1>
+        <p class="lead">Экстрасенс видит, где на шкале спрятана цель, и даёт подсказку. Остальные ставят стрелку. Чем ближе к центру цели, тем больше очков.</p>
+      </div>
+      <figure class="demo">
+        <svg id="demoDial" class="dial" role="slider" aria-label="Стрелка на шкале" aria-valuemin="0" aria-valuemax="100"></svg>
+        <div class="spectrum"><div class="spec-l">← Холодное</div><div class="spec-r">Горячее →</div></div>
+        <figcaption class="demo-cap"><span>Подсказка: <b>«Чай»</b>. Потяните стрелку.</span><span id="demoScore" class="demo-score">3 очка</span></figcaption>
+      </figure>
+      <ol class="steps">
+        <li><span>Экстрасенс крутит диск. Под шторкой появляется цель с зонами на 2, 3 и 4 очка — её видит только он.</span></li>
+        <li><span>Он выбирает шкалу из двух крайностей и даёт подсказку, которая указывает на место цели.</span></li>
+        <li><span>Остальные спорят и ставят стрелку туда, куда, по их мнению, ведёт подсказка.</span></li>
+        <li><span>Шторка открывается. Центр — 4 очка, рядом — 3 или 2, мимо — ноль.</span></li>
+      </ol>
+      <div class="panel panel-online"><h2>Играть онлайн</h2><div id="homeOnline" class="stack"></div></div>
+      <div class="panel"><h2>На одном телефоне</h2><div id="homeLocal" class="stack"></div></div>
+    </section>
+
+    <section id="vSetup" class="view" hidden></section>
+    <section id="vLobby" class="view" hidden></section>
+
+    <section id="vGame" class="view" hidden>
+      <div id="gHead" class="g-head"></div>
+      <svg id="gameDial" class="dial" role="slider" aria-label="Стрелка на шкале" aria-valuemin="0" aria-valuemax="100"></svg>
+      <div id="gSpectrum"></div>
+      <div id="gClue" class="clue" hidden></div>
+      <div id="gPanel" class="g-panel"></div>
+      <div id="gPlayers"></div>
+      <div id="gFoot" class="foot"></div>
+    </section>
+
+    <section id="vOver" class="view" hidden></section>
+  </main>
+
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="../assets/firebase.js"></script>
+<script src="volna.js"></script>
+</body>
+</html>

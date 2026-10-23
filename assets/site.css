@@ -1,0 +1,128 @@
+/* Игротека — общие стили сайта: цвета (светлая и тёмная тема), шрифты, шапка, кнопки, поля, панели, фишки, тосты.
+   Каждая игра подключает этот файл и добавляет свой CSS. Цвета — только через токены. */
+:root{
+  color-scheme:light;
+  --bg:#E6ECE8; --surface:#F4F7F4; --surface-2:#D8E2DC; --ink:#12201B; --muted:#53645D; --line:#C2CEC8; --key-edge:#B3C1BA;
+  --accent:#D4462A; --accent-edge:#9E3018; --accent-ink:#FFF6F1; --focus:#1F6FD1;
+  --face:#133A33; --face-2:#1A463E; --rim:#1E2A26; --tick:#EDE4C8; --shutter:#245A50; --shutter-2:#1C4C43;
+  --b2:#F3CB55; --b3:#EF9A3D; --b4:#D4462A; --num:#2A140A; --needle:#FBF6EA; --needle-edge:#091714;
+  --spec-l:#CFE2E9; --spec-l-ink:#123844; --spec-r:#F7DCCB; --spec-r-ink:#5A2412;
+  --team0:#2B67C6; --team1:#A93A88; --good:#2F8F5B; --shadow:rgba(9,23,20,.14);
+  --font-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --font-body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0B1412; --surface:#121F1C; --surface-2:#1B2C28; --ink:#E2EBE7; --muted:#8DA098; --line:#25362F; --key-edge:#050B0A;
+  --accent:#EC6143; --accent-edge:#A93C22; --accent-ink:#1B0904; --focus:#6FA8FF;
+  --face:#103530; --face-2:#164239; --rim:#26342F; --tick:#E6DDC0; --shutter:#215247; --shutter-2:#1A463C;
+  --b2:#EFC54E; --b3:#EB9338; --b4:#E0553A; --num:#26120A; --needle:#FBF6EA; --needle-edge:#020807;
+  --spec-l:#16323C; --spec-l-ink:#BFE0EC; --spec-r:#3E2419; --spec-r-ink:#F5CDB8;
+  --team0:#6FA3F5; --team1:#E27CC6; --good:#4CC085; --shadow:rgba(0,0,0,.4);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0B1412; --surface:#121F1C; --surface-2:#1B2C28; --ink:#E2EBE7; --muted:#8DA098; --line:#25362F; --key-edge:#050B0A;
+  --accent:#EC6143; --accent-edge:#A93C22; --accent-ink:#1B0904; --focus:#6FA8FF;
+  --face:#103530; --face-2:#164239; --rim:#26342F; --tick:#E6DDC0; --shutter:#215247; --shutter-2:#1A463C;
+  --b2:#EFC54E; --b3:#EB9338; --b4:#E0553A; --num:#26120A; --needle:#FBF6EA; --needle-edge:#020807;
+  --spec-l:#16323C; --spec-l-ink:#BFE0EC; --spec-r:#3E2419; --spec-r-ink:#F5CDB8;
+  --team0:#6FA3F5; --team1:#E27CC6; --good:#4CC085; --shadow:rgba(0,0,0,.4);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top, 0px);padding-bottom:env(safe-area-inset-bottom, 0px)}
+body{margin:0}
+img{max-width:100%}
+#vHome.invited .hero{order:-2} #vHome.invited .panel-online{order:-1}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.app{max-width:580px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:12px 48px;display:flex;flex-direction:column;gap:18px}
+main{display:flex;flex-direction:column}
+.view{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* Шапка */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px}
+.brand{display:flex;align-items:center;gap:10px;background:none;border:0;color:inherit;padding:4px 0;cursor:pointer;font:inherit;border-radius:8px}
+.brand svg{width:34px;height:21px;flex:none}
+.logo-face{fill:var(--face)}
+.logo-needle{stroke:var(--accent);stroke-width:2.6;stroke-linecap:round;fill:none}
+.logo-hub{fill:var(--accent)}
+.wordmark{font-family:var(--font-display);font-weight:800;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.top-right{display:flex;align-items:center;gap:6px;min-width:0}
+
+/* Типографика */
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance}
+h1{font-size:clamp(30px, 9vw, 44px);line-height:1.02;font-weight:800;letter-spacing:-.025em}
+h1.h-sm{font-size:clamp(24px, 7vw, 32px)}
+h2{font-size:15px;font-weight:600;letter-spacing:.005em}
+.lead{color:var(--muted);margin:0;max-width:60ch}
+.eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.msg{color:var(--muted);margin:0}
+.msg b,.msg strong{color:var(--ink);font-weight:600}
+.small{font-size:13px}
+.mono{font-family:var(--font-mono)}
+.hero{display:flex;flex-direction:column;gap:10px}
+.stack{display:flex;flex-direction:column;gap:12px}
+
+/* Поверхности */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+
+/* Кнопки-клавиши */
+.btn{appearance:none;border:0;border-radius:12px;min-height:48px;padding:0 18px;font:600 16px/1.1 var(--font-body);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--surface-2);color:var(--ink);box-shadow:0 3px 0 var(--key-edge);transition:transform .06s ease, box-shadow .06s ease;text-align:center}
+.btn:active:not([disabled]){transform:translateY(2px);box-shadow:0 1px 0 var(--key-edge)}
+.btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 3px 0 var(--accent-edge)}
+.btn-primary:active:not([disabled]){box-shadow:0 1px 0 var(--accent-edge)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn-block{width:100%}
+.btn-quiet{appearance:none;background:none;border:0;color:var(--muted);min-height:40px;padding:0 8px;font:500 14px var(--font-body);cursor:pointer;text-decoration:underline;text-underline-offset:3px;border-radius:8px;align-self:center}
+.btn-quiet:hover{color:var(--ink)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
+.row > .btn{flex:1 1 auto}
+.row > input{flex:1 1 140px}
+.nudge .btn:not(.grow){flex:0 0 56px;font-size:22px;padding:0}
+.nudge .grow{flex:1 1 auto}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+/* Поля и переключатели */
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field > label,.label{font-size:13px;color:var(--muted);font-weight:500}
+input[type=text]{height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 14px;font:500 16px var(--font-body);width:100%;min-width:0}
+input[type=text]::placeholder{color:var(--muted);opacity:.75}
+input.code-input{font-family:var(--font-mono);font-weight:700;letter-spacing:.2em;text-transform:uppercase}
+.seg{display:flex;background:var(--surface-2);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;min-height:40px;border:0;border-radius:9px;background:none;color:var(--muted);font:600 14px var(--font-body);cursor:pointer;padding:0 8px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px var(--shadow)}
+
+
+/* Счёт и игроки */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font:700 13px var(--font-mono);white-space:nowrap}
+.chip b{font-variant-numeric:tabular-nums}
+.chip.is-active{border-color:var(--team-c);box-shadow:inset 0 0 0 1px var(--team-c)}
+.t0{--team-c:var(--team0)} .t1{--team-c:var(--team1)}
+.tdot{width:9px;height:9px;border-radius:50%;background:var(--team-c);flex:none}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom, 0px));width:max-content;max-width:calc(100% - 32px);background:var(--ink);color:var(--bg);padding:12px 16px;border-radius:12px;font-weight:500;font-size:15px;box-shadow:0 8px 28px var(--shadow);z-index:20}
+
+.dots::after{content:"…";display:inline-block;margin-left:1px;animation:blink 1.2s ease-in-out infinite}
+@keyframes blink{50%{opacity:.2}}
+@media (prefers-reduced-motion: reduce){ .dots::after{animation:none} .btn{transition:none} }
+@media (max-width:380px){ .wordmark{display:none} }
+
+/* Документ вне Claude */
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top, 0px);padding-bottom:env(safe-area-inset-bottom, 0px)}
+body{margin:0}
+img{max-width:100%}
+
+/* Счётчик раундов */
+.setting{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.stepper{display:inline-flex;align-items:center;gap:4px;background:var(--surface-2);border-radius:12px;padding:4px}
+.stepper button{width:44px;height:40px;border:0;border-radius:9px;background:var(--surface);color:var(--ink);font:600 20px/1 var(--font-body);cursor:pointer;box-shadow:0 1px 3px var(--shadow)}
+.stepper button[disabled]{opacity:.4;cursor:not-allowed}
+.stepper output{min-width:48px;text-align:center;font:700 20px var(--font-mono);font-variant-numeric:tabular-nums}
+.mode-name{font-family:var(--font-display);font-weight:600;font-size:17px;margin:0}
+.back-link{align-self:flex-start;color:var(--muted);font:500 14px var(--font-body);text-decoration:none;border-radius:8px;padding:4px 0}
+.back-link:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
