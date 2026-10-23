@@ -4,8 +4,9 @@
 Нужно: Python 3 и Playwright (pip install playwright; playwright install chromium).
 Скрипт поднимает локальный сервер, открывает игру в нескольких вкладках и подменяет Firebase
 имитацией из dev/mockfb.js (вкладки делят одну базу через BroadcastChannel).
-Сценарии: права админа, подсказки и запретные слова, скрытые фишки, второй круг, очки,
-«Не ждать остальных», пропуск раунда, итоги, пустые комнаты.
+Сценарии: «Каждый за себя» на троих (права админа, подсказки и запретные слова, скрытые фишки,
+второй круг, очки, «Не ждать остальных», пропуск, итоги), «Команды» на четверых на большой палитре
+(общая фишка и согласия, клавиатура, перехват, раскладка для компьютера), пустые комнаты.
 """
 import asyncio, os, subprocess, sys, time
 from playwright.async_api import async_playwright
@@ -47,9 +48,9 @@ async def join(pg, nick, code):
     await pg.click("[data-act=join]")
     await pg.wait_for_selector("#vLobby .code")
 
-async def tap_cell(pg, row, col):
+async def tap_cell(pg, row, col, cols=COLS, rows=ROWS):
     b = await pg.locator("#gameGrid .marks").bounding_box()
-    await pg.mouse.click(b["x"] + (col + .5) * b["width"] / COLS, b["y"] + (row + .5) * b["height"] / ROWS)
+    await pg.mouse.click(b["x"] + (col + .5) * b["width"] / cols, b["y"] + (row + .5) * b["height"] / rows)
 
 async def giver_of(pages):
     for _ in range(40):
@@ -186,6 +187,88 @@ async def main():
             await A.click("[data-act=again]")
             await C.wait_for_selector("#vLobby .code")
             check(True, "«Сыграть ещё» возвращает всех в лобби")
+
+            print("== Команды на четверых, большая палитра, компьютер ==")
+            D = await open_page(ctx, "D")
+            await join(D, "Гоша", code)
+            await A.wait_for_selector("text=Игроки · 4")
+            await A.click("[data-act=setMode][data-arg=teams]")
+            await A.click("[data-act=setSize][data-arg=l]")
+            await B.wait_for_selector("text=Всего раундов: 4")
+            check("Большая" in await txt(B, "#vLobby") and "Акварель" in await txt(B, "#vLobby"), "игроки видят режим, палитру и составы команд")
+            check(await count(B, "[data-act=setSize]") == 0 and await count(B, "[data-act=shuffle]") == 0, "палитру и составы меняет только админ")
+            await A.click("[data-act=start]")
+            pages = [A, B, C, D]
+            await B.wait_for_selector("#vGame:not([hidden])")
+            check(await count(B, "#gameGrid .cells i") == 30 * 16, "большая палитра 30×16")
+            g = await giver_of(pages)
+            await g.click("[data-act=draw]")
+            await give_clue(g, "закат")
+            await A.wait_for_timeout(500)
+            mates = [pg for pg in pages if await count(pg, "[data-act=vote]")]
+            check(len(mates) == 1, "общую фишку двигает команда ведущего (без ведущего)")
+            mate = mates[0]
+            others = [pg for pg in pages if pg is not g and pg is not mate]
+            await tap_cell(mate, 3, 4, 30, 16)
+            await A.wait_for_timeout(400)
+            check(all([await count(pg, "#gameGrid .cone") == 1 for pg in others]), "общая фишка видна всем")
+            check(await count(others[0], "#gameGrid.is-live") == 0, "соперники не могут двигать фишку команды")
+            await mate.click("[data-act=vote]")
+            await g.wait_for_selector("#clueSubmit", timeout=4000)
+            await give_clue(g, "тёплый вечер")
+            await mate.wait_for_selector("[data-act=vote]")
+            await tap_cell(mate, 3, 4, 30, 16)
+            await mate.wait_for_timeout(300)
+            check(await mate.is_disabled("[data-act=vote]"), "вторую фишку нельзя ставить на клетку первой")
+            await mate.keyboard.press("ArrowRight")
+            await mate.wait_for_timeout(300)
+            check("D6" in await txt(mate, "#gPanel"), "стрелка на клавиатуре двигает общую фишку")
+            await mate.keyboard.press("Enter")
+            await A.wait_for_timeout(700)
+            opps = [pg for pg in pages if await count(pg, "[data-act=vote]")]
+            check(len(opps) == 2 and mate not in opps, "перехват ставят соперники")
+            tgt = await g.evaluate("JSON.parse(localStorage.getItem('hu.secret')).target")
+            near = tgt in (3 * 30 + 4, 3 * 30 + 5)
+            await tap_cell(opps[0], tgt // 30, tgt % 30, 30, 16) if not near else await tap_cell(opps[0], 10, 10, 30, 16)
+            await opps[0].click("[data-act=vote]")
+            await A.wait_for_timeout(400)
+            check("Согласны 1 из 2" in await txt(opps[1], "#gPanel"), "согласие соперника засчитано")
+            await opps[1].click("[data-act=nudge][data-arg=d]")
+            await A.wait_for_timeout(400)
+            check("Согласны 0 из 2" in await txt(opps[0], "#gPanel"), "сдвиг перехвата сбрасывает согласия")
+            await opps[1].click("[data-act=nudge][data-arg=u]")
+            await A.wait_for_timeout(300)
+            for pg in opps: await pg.click("[data-act=vote]")
+            await B.wait_for_selector("[data-act=ready]", timeout=4000)
+            res = await txt(B, "#gPanel")
+            print("   итог:", res[:180])
+            check("Команде" in res and await count(B, "#gameGrid .cone") == 3, "итог: очки команды, две фишки и перехват")
+            if not near: check("+1" in res and "соперникам" in res, "перехват точно в цвет — +1 соперникам")
+            top = await txt(C, "#topRight")
+            check("АК" in top and "ГУ" in top, "счёт команд в шапке")
+
+            await A.set_viewport_size({"width": 1366, "height": 900})
+            await A.wait_for_timeout(300)
+            gb = await A.locator("#gameGrid").bounding_box(); pb = await A.locator("#gPanel").bounding_box()
+            print("   раскладка:", gb, pb, await A.is_visible("#gBoard"), await A.is_visible("#gameGrid .ax-top"))
+            check(pb["x"] > gb["x"] + gb["width"] and await A.is_visible("#gBoard") and await A.is_visible("#gameGrid .ax-top"), "на компьютере: палитра слева, панель и таблица справа, подписи осей")
+            check(gb["width"] > 700, f"палитра на компьютере крупная ({int(gb['width'])}px)")
+            check(not await A.is_visible("#gBoard") or not await B.is_visible("#gBoard"), "на телефоне боковой таблицы нет")
+            for pg in pages: await pg.click("[data-act=ready]")
+            g2 = await giver_of(pages)
+            check(g2 is not None and g2 is not g and g2 is not mate, "следующий ход у другой команды")
+            for _ in range(3):
+                if await A.is_visible("#vOver"): break
+                await A.click("#gFoot [data-act=skip]"); await A.click("#gFoot [data-act=skip]")
+                await A.wait_for_timeout(500)
+            await B.wait_for_selector("#vOver:not([hidden])", timeout=4000)
+            over = await txt(B, "#vOver")
+            check(("Победили" in over or "Ничья" in over) and "Как шли раунды" in over, "итоги команд")
+            print("   итоги:", over[:160])
+            await A.click("[data-act=again]")
+            await D.wait_for_selector("#vLobby .code")
+            await D.click("[data-act=leave]"); await D.click("[data-act=leave]")
+            await D.wait_for_selector("#vHome:not([hidden])")
 
             print("== Пустые комнаты ==")
             for pg in (A, B, C):

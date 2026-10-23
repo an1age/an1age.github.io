@@ -3,24 +3,50 @@
 (() => {
 "use strict";
 
-/* ---------------- Палитра ---------------- */
-const COLS = 24, ROWS = 14, CELLS = COLS * ROWS;
+/* ---------------- Палитры ---------------- */
+const BOARDS = {
+  m: { cols: 24, rows: 14, name: "Обычная", hint: "24 × 14, 336 цветов. Удобно с телефона." },
+  l: { cols: 30, rows: 16, name: "Большая", hint: "30 × 16, 480 цветов — как в настольной игре." },
+  xl: { cols: 40, rows: 22, name: "Огромная", hint: "40 × 22, 880 цветов. Лучше играть с компьютера." }
+};
 const ROW_L = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const colOf = i => i % COLS, rowOf = i => Math.floor(i / COLS);
-const cellName = i => ROW_L[rowOf(i)] + (colOf(i) + 1);
+const boardCache = {};
 /* По горизонтали — тон по кругу, по вертикали — от светлых пастельных к тёмным */
-const COLORS = [];
-for (let r = 0; r < ROWS; r++) {
-  const t = r / (ROWS - 1);
-  const l = 87 - t * 67;
-  const s = 62 + 30 * Math.sin(Math.PI * Math.min(1, t * 1.25));
-  for (let c = 0; c < COLS; c++) COLORS.push(`hsl(${Math.round(c * 360 / COLS)} ${Math.round(s)}% ${Math.round(l)}%)`);
+function board(key) {
+  key = BOARDS[key] ? key : "m";
+  if (boardCache[key]) return boardCache[key];
+  const { cols, rows } = BOARDS[key], colors = [];
+  for (let r = 0; r < rows; r++) {
+    const t = r / (rows - 1);
+    const l = 88 - t * 70;
+    const s = 62 + 30 * Math.sin(Math.PI * Math.min(1, t * 1.25));
+    for (let c = 0; c < cols; c++) colors.push(`hsl(${Math.round(c * 360 / cols)} ${Math.round(s)}% ${Math.round(l)}%)`);
+  }
+  return (boardCache[key] = { key, cols, rows, cells: cols * rows, colors });
 }
+/* Текущая палитра: у комнаты своя, на главной — обычная */
+let BD = board("m");
+const colOf = i => i % BD.cols, rowOf = i => Math.floor(i / BD.cols);
+const isCell = v => Number.isInteger(v) && v >= 0 && v < BD.cells;
+const cellName = i => ROW_L[rowOf(i)] + (colOf(i) + 1);
 /* Нельзя называть основные цвета */
 const BANNED = /^(красн|оранжев|ж[её]лт|зел[её]н|голуб|син(ий|яя|ее|ие|его|ей|им|ими|их|ему|юю)$|фиолетов|розов|коричнев|б[еэ]л(ый|ая|ое|ые|ого|ой|ым|ыми|ых|ому|ую)$|ч[её]рн|сер(ый|ая|ое|ые|ого|ой|ым|ыми|ых|ому|ую)$|red|orange|yellow|green|blue|purple|violet|pink|brown|white|black|gr[ae]y)/i;
 
+const MODE_NAMES = { solo: "Каждый за себя", teams: "Команды" };
+const TEAMS = ["Акварель", "Гуашь"];
+const TEAM_SHORT = ["АК", "ГУ"];
+const RULES = {
+  solo: [
+    "Каждый играет сам за себя. Ведущий по очереди выбирает цвет и даёт подсказку в одно слово, все тайно ставят фишку. Потом фишки открываются, ведущий даёт вторую подсказку до двух слов, и все ставят ещё по фишке.",
+    "Точно в цвет — <b>3</b>, в рамке 3×3 вокруг — <b>2</b>, на клетку дальше рамки — <b>1</b>. Ведущий получает <b>+1</b> за каждую фишку в рамке 3×3."
+  ],
+  teams: [
+    "Команды ходят по очереди. Ведущий даёт подсказку в одно слово, его команда двигает одну общую фишку: сдвинуть её может каждый, а встанет она, когда все нажмут «Согласен». Потом вторая подсказка до двух слов и вторая фишка.",
+    "Затем соперники ставят общую фишку-перехват: если она ближе к цвету, чем обе фишки команды, соперникам <b>+1</b>. Фишки команды: точно в цвет — <b>3</b>, в рамке 3×3 — <b>2</b>, на клетку дальше — <b>1</b>. Ходов у команд поровну."
+  ]
+};
 const PCOLORS = ["#E4572E", "#2B67C6", "#2F8F5B", "#A93A88", "#E8A317", "#139C9A", "#7B4EA3", "#8C6A43", "#D81E5B", "#4C6085"];
-const MIN_LAPS = 1, MAX_LAPS = 4;
+const MIN_LAPS = 1, MAX_LAPS = 30;
 
 /* ---------------- Утилиты ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -28,7 +54,6 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const rnd = n => Math.floor(Math.random() * n);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const isObj = x => x !== null && typeof x === "object" && !Array.isArray(x);
-const isCell = v => Number.isInteger(v) && v >= 0 && v < CELLS;
 const clone = x => x == null ? x : JSON.parse(JSON.stringify(x));
 const store = {
   get(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
@@ -59,17 +84,26 @@ function words(s) { return String(s || "").trim().split(/\s+/).filter(Boolean); 
 
 /* ---------------- Сетка (DOM) ---------------- */
 function createGrid(root, handlers) {
-  root.innerHTML = `<div class="cells">${COLORS.map(c => `<i style="background:${c}"></i>`).join("")}</div><div class="marks"></div>`;
-  const marks = root.querySelector(".marks");
-  let live = false, drag = false;
+  let cur = null, live = false, drag = false, marks = null;
+  function setBoard(bd) {
+    if (cur === bd.key) return;
+    cur = bd.key;
+    root.style.setProperty("--cols", bd.cols);
+    root.style.setProperty("--rows", bd.rows);
+    root.style.setProperty("--gw", (bd.cols / (bd.rows * 1.15)).toFixed(4));
+    const top = Array.from({ length: bd.cols }, (_, c) => `<span style="left:${((c + .5) / bd.cols * 100).toFixed(3)}%">${c + 1}</span>`).join("");
+    const left = Array.from({ length: bd.rows }, (_, r) => `<span style="top:${((r + .5) / bd.rows * 100).toFixed(3)}%">${ROW_L[r]}</span>`).join("");
+    root.innerHTML = `<div class="ax ax-top" aria-hidden="true">${top}</div><div class="ax ax-left" aria-hidden="true">${left}</div><div class="cells">${bd.colors.map(c => `<i style="background:${c}"></i>`).join("")}</div><div class="marks"></div>`;
+    marks = root.querySelector(".marks");
+  }
   const cellAt = e => {
-    const b = marks.getBoundingClientRect();
-    const c = clamp(Math.floor((e.clientX - b.left) / b.width * COLS), 0, COLS - 1);
-    const r = clamp(Math.floor((e.clientY - b.top) / b.height * ROWS), 0, ROWS - 1);
-    return r * COLS + c;
+    const b = marks.getBoundingClientRect(), bd = board(cur);
+    const c = clamp(Math.floor((e.clientX - b.left) / b.width * bd.cols), 0, bd.cols - 1);
+    const r = clamp(Math.floor((e.clientY - b.top) / b.height * bd.rows), 0, bd.rows - 1);
+    return r * bd.cols + c;
   };
   root.addEventListener("pointerdown", e => {
-    if (!live) return;
+    if (!live || !marks) return;
     drag = true;
     try { root.setPointerCapture(e.pointerId); } catch {}
     handlers.pick(cellAt(e));
@@ -80,15 +114,16 @@ function createGrid(root, handlers) {
   root.addEventListener("pointerup", end);
   root.addEventListener("pointercancel", end);
   return {
+    setBoard,
     setLive(v) { live = !!v; root.classList.toggle("is-live", live); },
-    setMarks(html) { if (marks._h !== html) { marks.innerHTML = html; marks._h = html; } }
+    setMarks(html) { if (marks && marks._h !== html) { marks.innerHTML = html; marks._h = html; } }
   };
 }
-const pctX = c => (c / COLS * 100).toFixed(3) + "%";
-const pctY = r => (r / ROWS * 100).toFixed(3) + "%";
+const pctX = c => (c / BD.cols * 100).toFixed(3) + "%";
+const pctY = r => (r / BD.rows * 100).toFixed(3) + "%";
 function boxHTML(i, rad, cls) {
-  const c0 = clamp(colOf(i) - rad, 0, COLS - 1), c1 = clamp(colOf(i) + rad, 0, COLS - 1);
-  const r0 = clamp(rowOf(i) - rad, 0, ROWS - 1), r1 = clamp(rowOf(i) + rad, 0, ROWS - 1);
+  const c0 = clamp(colOf(i) - rad, 0, BD.cols - 1), c1 = clamp(colOf(i) + rad, 0, BD.cols - 1);
+  const r0 = clamp(rowOf(i) - rad, 0, BD.rows - 1), r1 = clamp(rowOf(i) + rad, 0, BD.rows - 1);
   return `<span class="${cls}" style="left:${pctX(c0)};top:${pctY(r0)};width:${pctX(c1 - c0 + 1)};height:${pctY(r1 - r0 + 1)}"></span>`;
 }
 const targetHTML = i => boxHTML(i, 2, "frame is-outer") + boxHTML(i, 1, "frame") + boxHTML(i, 0, "tgt");
@@ -101,7 +136,7 @@ function conesHTML(list) {
     const g = by[k], n = g.length;
     g.forEach((m, j) => {
       const off = n > 1 ? (j - (n - 1) / 2) * 0.55 : 0;
-      const x = (colOf(m.cell) + 0.5 + off) / COLS * 100, y = (rowOf(m.cell) + 0.5) / ROWS * 100;
+      const x = (colOf(m.cell) + 0.5 + off) / BD.cols * 100, y = (rowOf(m.cell) + 0.5) / BD.rows * 100;
       html += `<span class="cone ${m.cls || ""}" style="left:${x.toFixed(3)}%;top:${y.toFixed(3)}%;--pc:${m.color}">${esc(m.letter || "")}</span>`;
     });
   }
@@ -111,15 +146,20 @@ function conesHTML(list) {
 /* ---------------- Игровая логика ---------------- */
 function dist(a, b) { return Math.max(Math.abs(colOf(a) - colOf(b)), Math.abs(rowOf(a) - rowOf(b))); }
 function pointsFor(target, cell) { if (!isCell(cell)) return 0; const d = dist(target, cell); return d === 0 ? 3 : d === 1 ? 2 : d === 2 ? 1 : 0; }
-function blankGame(laps) {
-  return { laps, rounds: 0, status: "lobby", round: null, score: {}, history: [] };
+function blankGame(mode, laps, size) {
+  return { mode, laps, size, rounds: 0, status: "lobby", round: null, score: {}, tscore: [0, 0], turns: [0, 0], history: [] };
 }
-function makeRound(n, giver) {
-  return { n, giver: giver || null, phase: "think", clue1: "", clue2: "", g1: null, g2: null, force: null, ready: null, target: null, results: null, giverPts: null };
+function makeRound(n, giver, team) {
+  return {
+    n, giver: giver || null, team: team == null ? null : team, phase: "think", clue1: "", clue2: "",
+    g1: null, g2: null, sel: null, votes: null, c1: null, c2: null, steal: null, force: null, ready: null,
+    target: null, results: null, giverPts: null, ta: null, tb: null, stealPt: null
+  };
 }
 function sortedPlayers(players) {
   return players.slice().sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0) || String(a.seat).localeCompare(String(b.seat)));
 }
+function teamMembers(players, t) { return sortedPlayers(players).filter(p => (p.team | 0) === t); }
 /* Ведущий раунда n — по кругу в порядке входа; кто не в сети, того пропускаем */
 function giverFor(n, players) {
   const order = sortedPlayers(players);
@@ -130,21 +170,61 @@ function giverFor(n, players) {
   }
   return order[(n - 1) % order.length].seat;
 }
+/* В командах ведущий меняется по кругу внутри команды */
+function teamGiver(turns, players, team) {
+  const mem = teamMembers(players, team), t = (turns || [0, 0]).slice();
+  if (!mem.length) return { giver: null, turns: t };
+  let giver = mem[t[team] % mem.length].seat;
+  for (let k = 0; k < mem.length; k++) { const p = mem[(t[team] + k) % mem.length]; if (p.online) { giver = p.seat; break; } }
+  t[team]++;
+  return { giver, turns: t };
+}
+function roundsFor(G, players) {
+  if (G.mode === "teams") return 2 * G.laps * Math.max(teamMembers(players, 0).length, teamMembers(players, 1).length);
+  return G.laps * players.length;
+}
 function startPatch(G, players) {
-  return {
+  const patch = {
     status: "play", gid: Date.now().toString(36) + rnd(46656).toString(36),
-    rounds: G.laps * players.length, score: LEAF({}), history: [],
-    round: LEAF(makeRound(1, giverFor(1, players)))
+    rounds: roundsFor(G, players), score: LEAF({}), tscore: [0, 0], history: []
   };
+  if (G.mode === "teams") {
+    const team = rnd(2), t = teamGiver([0, 0], players, team);
+    patch.turns = t.turns;
+    patch.round = LEAF(makeRound(1, t.giver, team));
+  } else {
+    patch.turns = [0, 0];
+    patch.round = LEAF(makeRound(1, giverFor(1, players), null));
+  }
+  return patch;
 }
 const gameWillEnd = G => G.round.n >= G.rounds;
 function nextPatch(G, players) {
   if (gameWillEnd(G)) return { status: "over" };
   const n = G.round.n + 1;
-  return { round: LEAF(makeRound(n, giverFor(n, players))) };
+  if (G.mode === "teams") {
+    const team = 1 - G.round.team, t = teamGiver(G.turns, players, team);
+    return { turns: t.turns, round: LEAF(makeRound(n, t.giver, team)) };
+  }
+  return { round: LEAF(makeRound(n, giverFor(n, players), null)) };
 }
 function revealPatch(G, target) {
-  const r = G.round, g1 = r.g1 || {}, g2 = r.g2 || {}, score = Object.assign({}, G.score || {}), results = {};
+  const r = G.round;
+  if (G.mode === "teams") {
+    const a = pointsFor(target, r.c1), b = pointsFor(target, r.c2), steal = isCell(r.sel) ? r.sel : null;
+    const near = Math.min(isCell(r.c1) ? dist(target, r.c1) : 99, isCell(r.c2) ? dist(target, r.c2) : 99);
+    const stealPt = steal != null && dist(target, steal) < near ? 1 : 0;
+    const t = G.tscore.slice();
+    t[r.team] += a + b;
+    t[1 - r.team] += stealPt;
+    const entry = { n: r.n, team: r.team, giver: r.giver, target, clue1: r.clue1, clue2: r.clue2, ta: a, tb: b, stealPt, steal };
+    return {
+      round: { target, phase: "result", ta: a, tb: b, steal, stealPt, sel: null, votes: null, ready: null },
+      tscore: t,
+      history: (G.history || []).concat([entry]).slice(-60)
+    };
+  }
+  const g1 = r.g1 || {}, g2 = r.g2 || {}, score = Object.assign({}, G.score || {}), results = {};
   let giverPts = 0;
   for (const uid of new Set([...Object.keys(g1), ...Object.keys(g2)])) {
     if (uid === r.giver) continue;
@@ -158,19 +238,19 @@ function revealPatch(G, target) {
   return {
     round: { target, phase: "result", results: LEAF(results), giverPts, ready: null },
     score: LEAF(score),
-    history: (G.history || []).concat([entry]).slice(-40)
+    history: (G.history || []).concat([entry]).slice(-60)
   };
 }
 /* Карточка ведущего: четыре цвета подальше друг от друга и от прошлых целей */
 function drawCard(G) {
   const used = new Set((G.history || []).map(h => h.target));
   const out = [];
-  for (let tries = 0; out.length < 4 && tries < 2000; tries++) {
-    const c = rnd(CELLS);
+  for (let tries = 0; out.length < 4 && tries < 3000; tries++) {
+    const c = rnd(BD.cells);
     if (used.has(c) || out.some(x => dist(x, c) < 4)) continue;
     out.push(c);
   }
-  while (out.length < 4) out.push(rnd(CELLS));
+  while (out.length < 4) out.push(rnd(BD.cells));
   return out;
 }
 function clueProblem(text, max) {
@@ -187,7 +267,7 @@ const S = {
   mode: null, code: null, game: null, players: [], playersRaw: {}, rooms: [], roomsOn: false,
   online: new Set(), unsub: [],
   secret: null, loadingSecret: null, secretChecked: null,
-  sel: null, revealKey: null, clue2Key: null, advKey: null,
+  sel: null, localSel: null, stepKey: null, advKey: null,
   view: null, wake: null, hashCode: null,
   ui: { card: null, cardKey: null, pick: 0, confirm: null },
   drafts: { nick: "", code: "", clue: "" }
@@ -201,6 +281,7 @@ S.drafts.nick = S.nick;
 
 /* Ключ раунда: комната + партия + номер раунда. Партия (gid) нужна, чтобы новая игра в той же комнате не подхватила цель прошлой. */
 const rKey = G => S.code + ":" + ((G && G.gid) || 0) + ":" + (G && G.round ? G.round.n : 0);
+const phaseKey = G => rKey(G) + ":" + (G && G.round ? G.round.phase : "");
 const myPlayer = () => S.players.find(p => p.seat === S.seat) || null;
 const nameOf = seat => { const p = S.players.find(x => x.seat === seat); return (p && p.name) || "Игрок"; };
 const letterOf = seat => (nameOf(seat).trim()[0] || "?").toUpperCase();
@@ -216,16 +297,45 @@ function colorOf(seat) {
   const i = sortedPlayers(S.players).findIndex(p => p.seat === seat);
   return PCOLORS[(i < 0 ? 0 : i) % PCOLORS.length];
 }
-const guessersOf = G => S.players.map(p => p.seat).filter(s => s !== G.round.giver);
+const teamColor = t => `var(--team${t ? 1 : 0})`;
+const isTeams = G => !!G && G.mode === "teams";
 const guessKey = ph => ph === "guess2" ? "g2" : "g1";
+const SHARED = { guess1: 1, guess2: 1, steal: 1 };
+/* Кто сейчас двигает общую фишку и голосует (только «Команды») */
+function voters(G) {
+  const r = G.round;
+  if (!isTeams(G) || !r || !SHARED[r.phase]) return [];
+  if (r.phase === "steal") return teamMembers(S.players, 1 - r.team).map(p => p.seat);
+  return teamMembers(S.players, r.team).map(p => p.seat).filter(s => s !== r.giver);
+}
+/* Можно ли поставить фишку на клетку c: "" — можно, иначе причина */
+function cellProblem(G, c) {
+  const r = G.round;
+  if (!isCell(c)) return "none";
+  if (isTeams(G)) {
+    if ((r.phase === "guess2" || r.phase === "steal") && c === r.c1) return "busy";
+    if (r.phase === "steal" && c === r.c2) return "busy";
+    return "";
+  }
+  if (r.phase === "guess2") {
+    if (Object.values(r.g1 || {}).some(x => x === c)) return "busy";
+  }
+  return "";
+}
 /* Кто ещё должен ответить и выполнено ли условие. Учитываем только тех, кто сейчас в сети. */
 function roundStatus(G) {
   const r = G.round, on = s => S.online.has(s);
   const out = { req: [], done: [], ready: false };
   if (!r) return out;
-  if (r.phase === "guess1" || r.phase === "guess2") {
+  if (isTeams(G) && SHARED[r.phase]) {
+    out.req = voters(G).filter(on);
+    out.done = out.req.filter(s => r.votes && r.votes[s]);
+    const ok = !cellProblem(G, r.sel);
+    out.ready = ok && out.req.length > 0 && (out.done.length === out.req.length || (r.force === r.phase && out.done.length > 0));
+    if (r.phase === "steal" && out.req.length === 0) out.ready = true;
+  } else if (r.phase === "guess1" || r.phase === "guess2") {
     const g = r[guessKey(r.phase)] || {};
-    out.req = guessersOf(G).filter(on);
+    out.req = S.players.map(p => p.seat).filter(s => s !== r.giver).filter(on);
     out.done = out.req.filter(s => isCell(g[s]));
     out.ready = out.req.length > 0 && (out.done.length === out.req.length || (r.force === r.phase && out.done.length > 0));
   } else if (r.phase === "result") {
@@ -339,7 +449,7 @@ async function createRoom() {
     let code = genCode();
     for (let i = 0; i < 5; i++) { const s = await S.db.ref(`hues/rooms/${code}/game/status`).get(); if (!s.exists()) break; code = genCode(); }
     const now = Date.now();
-    const G = blankGame(2);
+    const G = blankGame("solo", 2, "m");
     Object.assign(G, { code, hostNick: nick, host: S.uid, createdAt: now, updatedAt: now });
     await S.db.ref().update({
       [`hues/rooms/${code}/game`]: stripNulls(clone(G)),
@@ -361,13 +471,20 @@ async function joinRoom(code) {
     const cur = ps.exists() ? ps.val() : null;
     if (!cur || !cur.name) await me.update({ name: nick, joinedAt: Date.now() });
     else if (cur.name !== nick) await me.update({ name: nick });
+    const ts = await S.db.ref(`hues/rooms/${code}/game/teams`).get();
+    const teams = (ts.exists() && ts.val()) || {};
+    if (teams[S.uid] == null) {
+      const c = [0, 0];
+      Object.keys(teams).forEach(k => { c[teams[k] === 1 ? 1 : 0]++; });
+      await S.db.ref(`hues/rooms/${code}/game/teams/${S.uid}`).set(c[0] <= c[1] ? 0 : 1);
+    }
     if (S.hashCode) { S.hashCode = null; try { history.replaceState(null, "", location.pathname + location.search); } catch {} }
     enterRoom(code);
   } catch (e) { toast(writeErr(e)); }
 }
 function enterRoom(code) {
   leaveSubs();
-  Object.assign(S, { mode: "online", code, game: null, players: [], playersRaw: {}, online: new Set(), sel: null });
+  Object.assign(S, { mode: "online", code, game: null, players: [], playersRaw: {}, online: new Set(), sel: null, localSel: null });
   resetRoundUI();
   store.set("hu.room", code);
   const base = S.db.ref("hues/rooms/" + code);
@@ -403,7 +520,7 @@ function enterRoom(code) {
   });
   render();
 }
-const ROUND_DEFAULTS = makeRound(0, null);
+const ROUND_DEFAULTS = makeRound(0, null, null);
 function arr(x) {
   if (Array.isArray(x)) return x;
   if (x && typeof x === "object") return Object.keys(x).sort((a, b) => a - b).map(k => x[k]);
@@ -411,25 +528,34 @@ function arr(x) {
 }
 /* Firebase не хранит пустые массивы и null — возвращаем игре привычную форму */
 function normGame(v) {
-  const G = Object.assign({ laps: 2, rounds: 0, status: "lobby" }, v);
+  const G = Object.assign({ mode: "solo", laps: 2, size: "m", rounds: 0, status: "lobby" }, v);
+  if (!MODE_NAMES[G.mode]) G.mode = "solo";
+  if (!BOARDS[G.size]) G.size = "m";
   G.score = isObj(v.score) ? v.score : {};
+  const ts = arr(v.tscore), tu = arr(v.turns);
+  G.tscore = [ts[0] || 0, ts[1] || 0];
+  G.turns = [tu[0] || 0, tu[1] || 0];
+  G.teams = v.teams || {};
   G.history = arr(v.history).filter(Boolean);
   G.round = v.round ? Object.assign({}, ROUND_DEFAULTS, v.round) : null;
   return G;
 }
 function buildPlayers() {
-  const raw = S.playersRaw || {};
+  const raw = S.playersRaw || {}, teams = (S.game && S.game.teams) || {};
   S.players = Object.keys(raw).filter(k => raw[k] && raw[k].name).map(k => ({
-    seat: k, name: String(raw[k].name).slice(0, 24), joinedAt: raw[k].joinedAt || 0, online: raw[k].online === true
+    seat: k, name: String(raw[k].name).slice(0, 24), joinedAt: raw[k].joinedAt || 0,
+    team: teams[k] === 1 ? 1 : 0, online: raw[k].online === true
   }));
   S.online = new Set(S.players.filter(p => p.online).map(p => p.seat));
 }
 function onGame(G) {
   const prev = S.game;
   S.game = G;
+  BD = board(G.size);
+  buildPlayers();
   const r = G.round;
   if (!prev || !prev.round || !r || prev.round.n !== r.n || prev.gid !== G.gid || prev.status !== G.status) resetRoundUI();
-  else if (prev.round.phase !== r.phase) { S.sel = null; S.drafts.clue = ""; }
+  else if (prev.round.phase !== r.phase) { S.sel = null; S.localSel = null; S.drafts.clue = ""; }
   render();
 }
 /* Следующий раунд, когда все готовы. Транзакция: даже если нажали одновременно, раунд сменится один раз. */
@@ -456,6 +582,7 @@ function leaveSubs() {
 function exitOnline() {
   leaveSubs();
   Object.assign(S, { mode: null, code: null, game: null, players: [], playersRaw: {} });
+  BD = board("m");
   store.del("hu.room");
   render();
 }
@@ -466,6 +593,7 @@ async function leaveRoom() {
   try {
     await S.db.ref().update({
       [`hues/rooms/${code}/players/${uid}`]: null,
+      [`hues/rooms/${code}/game/teams/${uid}`]: null,
       [`hues/lobby/${code}/online/${uid}`]: null
     });
     const rest = await S.db.ref(`hues/rooms/${code}/players`).get();
@@ -484,25 +612,27 @@ function copyText(text, okMsg) {
 }
 
 /* ---------------- Автоматика раунда ---------------- */
-/* Ведущий ведёт раунд: открывает первые фишки и считает очки — только у него есть цель. */
+/* Ведущий ведёт раунд: фиксирует фишки, открывает первый круг и считает очки — только у него есть цель. */
 function tick() {
   const G = S.game;
   if (S.mode !== "online" || !G || G.status !== "play" || !G.round) return;
-  const r = G.round, st = roundStatus(G);
-  if (r.giver === S.uid) {
-    if (r.phase === "guess1" && st.ready) {
-      const key = `c2:${rKey(G)}`;
-      if (S.clue2Key !== key) { S.clue2Key = key; commit({ round: { phase: "clue2", force: null } }); }
-    }
-    if (r.phase === "guess2" && st.ready && getSecret(G) != null) {
-      const key = `rev:${rKey(G)}`;
-      if (S.revealKey !== key) {
-        S.revealKey = key;
+  const r = G.round, st = roundStatus(G), teams = isTeams(G);
+  if (r.giver === S.uid && st.ready) {
+    const key = phaseKey(G);
+    if (S.stepKey !== key) {
+      if (r.phase === "guess1") {
+        S.stepKey = key;
+        commit({ round: teams ? { c1: r.sel, sel: null, votes: null, phase: "clue2", force: null } : { phase: "clue2", force: null } });
+      } else if (r.phase === "guess2" && teams) {
+        S.stepKey = key;
+        commit({ round: { c2: r.sel, sel: null, votes: null, phase: "steal", force: null } });
+      } else if ((r.phase === "guess2" || r.phase === "steal") && getSecret(G) != null) {
+        S.stepKey = key;
         setTimeout(() => {
           const G2 = S.game;
-          if (S.mode !== "online" || !G2 || !G2.round || G2.round.n !== r.n) { S.revealKey = null; return; }
+          if (S.mode !== "online" || !G2 || !G2.round || phaseKey(G2) !== key) { S.stepKey = null; return; }
           const t = getSecret(G2);
-          if (G2.round.phase !== "guess2" || !roundStatus(G2).ready || t == null) { S.revealKey = null; render(); return; }
+          if (!roundStatus(G2).ready || t == null) { S.stepKey = null; render(); return; }
           commit(revealPatch(G2, t));
         }, 700);
       }
@@ -517,7 +647,7 @@ function tick() {
 /* ---------------- Действия ---------------- */
 function resetRoundUI() {
   S.ui.card = null; S.ui.cardKey = null; S.ui.pick = 0; S.ui.confirm = null;
-  S.drafts.clue = ""; S.sel = null;
+  S.drafts.clue = ""; S.sel = null; S.localSel = null;
 }
 let confirmTimer = null;
 function confirmable(key, fn) {
@@ -529,17 +659,29 @@ function confirmable(key, fn) {
 }
 const confirmLabel = (key, label) => S.ui.confirm === key ? "Точно? Нажмите ещё раз" : label;
 const canSkip = G => G && G.round && (G.round.giver === S.uid || isAdmin(G));
-/* Можно ли сейчас мне ставить фишку и куда нельзя */
+/* «Каждый за себя»: можно ли мне сейчас ставить свою фишку */
 function myTurn(G) {
   const r = G && G.round;
-  if (!r || (r.phase !== "guess1" && r.phase !== "guess2") || r.giver === S.uid || !myPlayer()) return false;
+  if (!r || isTeams(G) || (r.phase !== "guess1" && r.phase !== "guess2") || r.giver === S.uid || !myPlayer()) return false;
   const g = r[guessKey(r.phase)] || {};
   return !isCell(g[S.uid]);
 }
-function blockedCells(G) {
-  const r = G.round, out = new Set();
-  if (r.phase === "guess2") Object.values(r.g1 || {}).forEach(c => { if (isCell(c)) out.add(c); });
-  return out;
+/* «Команды»: могу ли я двигать общую фишку */
+function canMoveShared(G) {
+  const r = G && G.round;
+  return !!r && isTeams(G) && !!SHARED[r.phase] && voters(G).includes(S.uid) && !roundStatus(G).ready;
+}
+const canPoint = G => myTurn(G) || canMoveShared(G);
+/* Общая фишка: своё последнее движение показываем сразу, не дожидаясь базы */
+function sharedSel(G) { return S.localSel && S.localSel.k === phaseKey(G) ? S.localSel.v : G.round.sel; }
+function currentSel(G) { return isTeams(G) ? sharedSel(G) : S.sel; }
+function pickCell(c) {
+  const G = S.game;
+  if (myTurn(G)) { S.sel = c; render(); return; }
+  if (!canMoveShared(G) || sharedSel(G) === c) return;
+  const ls = S.localSel = { k: phaseKey(G), v: c };
+  commit({ round: { sel: c, votes: null } }).then(() => { if (S.localSel === ls) { S.localSel = null; render(); } });
+  render();
 }
 
 const ACT = {
@@ -547,6 +689,14 @@ const ACT = {
   create() { createRoom(); },
   join() { joinRoom(S.drafts.code); },
   joinRoom(arg) { joinRoom(arg); },
+  setMode(arg) {
+    const G = S.game; if (!G || G.status !== "lobby" || !isAdmin(G) || !MODE_NAMES[arg]) return;
+    if (G.mode !== arg) commit({ mode: arg });
+  },
+  setSize(arg) {
+    const G = S.game; if (!G || G.status !== "lobby" || !isAdmin(G) || !BOARDS[arg]) return;
+    if (G.size !== arg) commit({ size: arg });
+  },
   laps(arg) {
     const G = S.game; if (!G || G.status !== "lobby" || !isAdmin(G)) return;
     const n = clamp((G.laps || 2) + (+arg || 0), MIN_LAPS, MAX_LAPS);
@@ -554,9 +704,22 @@ const ACT = {
   },
   start() {
     const G = S.game; if (!G || G.status !== "lobby" || !isAdmin(G)) return;
-    if (S.players.length < 2) return toast("Нужно минимум 2 игрока");
+    if (isTeams(G)) { if (teamMembers(S.players, 0).length < 2 || teamMembers(S.players, 1).length < 2) return toast("В каждой команде нужно минимум 2 игрока"); }
+    else if (S.players.length < 2) return toast("Нужно минимум 2 игрока");
     resetRoundUI();
     commit(startPatch(G, S.players));
+  },
+  async switchTeam() {
+    const me = myPlayer(); if (!me || !S.game || S.game.status !== "lobby") return;
+    try { await S.db.ref(`hues/rooms/${S.code}/game/teams/${S.uid}`).set(me.team === 1 ? 0 : 1); } catch (e) { toast(writeErr(e)); }
+  },
+  shuffle() {
+    const G = S.game; if (!G || G.status !== "lobby" || !isAdmin(G)) return;
+    const list = S.players.slice();
+    for (let i = list.length - 1; i > 0; i--) { const j = rnd(i + 1); [list[i], list[j]] = [list[j], list[i]]; }
+    const teams = {};
+    list.forEach((p, i) => { teams[p.seat] = i % 2; });
+    commit({ teams: LEAF(teams) }).then(() => toast("Команды перемешаны"));
   },
   async saveNick() {
     const nick = currentNick();
@@ -586,36 +749,43 @@ const ACT = {
     if (bad) return toast(bad);
     saveSecret(rKey(G), S.ui.card[S.ui.pick]);
     S.drafts.clue = "";
-    commit({ round: { clue1: clue, phase: "guess1", g1: null, g2: null, force: null } });
+    commit({ round: { clue1: clue, phase: "guess1", g1: null, g2: null, sel: null, votes: null, force: null } });
   },
   submitClue2() {
     const G = S.game; if (!G || !G.round || G.round.phase !== "clue2" || G.round.giver !== S.uid) return;
     const clue = words(S.drafts.clue).join(" ").slice(0, 40), bad = clueProblem(clue, 2);
     if (bad) return toast(bad);
     S.drafts.clue = "";
-    commit({ round: { clue2: clue, phase: "guess2", force: null } });
+    commit({ round: { clue2: clue, phase: "guess2", sel: null, votes: null, force: null } });
   },
   nudge(arg) {
-    const G = S.game; if (!myTurn(G)) return;
+    const G = S.game; if (!canPoint(G)) return;
     const d = { l: [-1, 0], r: [1, 0], u: [0, -1], d: [0, 1] }[arg]; if (!d) return;
-    const cur = isCell(S.sel) ? S.sel : Math.floor(ROWS / 2) * COLS + Math.floor(COLS / 2);
-    const c = clamp(colOf(cur) + d[0], 0, COLS - 1), r = clamp(rowOf(cur) + d[1], 0, ROWS - 1);
-    S.sel = r * COLS + c; render();
+    const s = currentSel(G), cur = isCell(s) ? s : Math.floor(BD.rows / 2) * BD.cols + Math.floor(BD.cols / 2);
+    const c = clamp(colOf(cur) + d[0], 0, BD.cols - 1), r = clamp(rowOf(cur) + d[1], 0, BD.rows - 1);
+    pickCell(r * BD.cols + c);
   },
   place() {
     const G = S.game; if (!myTurn(G) || !isCell(S.sel)) return;
-    if (blockedCells(G).has(S.sel)) return toast("Эта клетка занята фишкой первого круга");
+    if (cellProblem(G, S.sel)) return toast("Эта клетка занята фишкой первого круга");
     const r = G.round;
     if (r.phase === "guess2" && r.g1 && r.g1[S.uid] === S.sel) return toast("Вторая фишка не может стоять там же, где первая");
     commit({ round: { [guessKey(r.phase)]: { [S.uid]: S.sel } } });
   },
   unplace() {
-    const G = S.game, r = G && G.round; if (!r || (r.phase !== "guess1" && r.phase !== "guess2")) return;
+    const G = S.game, r = G && G.round; if (!r || isTeams(G) || (r.phase !== "guess1" && r.phase !== "guess2")) return;
     const k = guessKey(r.phase), v = r[k] && r[k][S.uid];
     if (isCell(v)) S.sel = v;
     commit({ round: { [k]: { [S.uid]: null } } });
   },
-  force() { const G = S.game; if (G && isAdmin(G) && G.round && /^guess/.test(G.round.phase)) commit({ round: { force: G.round.phase } }); },
+  /* «Команды»: «Согласен» / «Отменить согласие» */
+  vote() {
+    const G = S.game, r = G && G.round; if (!r || !isTeams(G) || !SHARED[r.phase] || !voters(G).includes(S.uid)) return;
+    if (r.votes && r.votes[S.uid]) { commit({ round: { votes: { [S.uid]: null } } }); return; }
+    if (cellProblem(G, sharedSel(G))) return toast("Сначала поставьте фишку на свободную клетку");
+    commit({ round: { votes: { [S.uid]: true } } });
+  },
+  force() { const G = S.game; if (G && isAdmin(G) && G.round && (/^guess/.test(G.round.phase) || G.round.phase === "steal")) commit({ round: { force: G.round.phase } }); },
   ready() {
     const G = S.game; if (!G || !G.round || G.round.phase !== "result") return;
     const on = G.round.ready && G.round.ready[S.uid];
@@ -626,7 +796,7 @@ const ACT = {
     confirmable("skip", () => {
       const G2 = S.game; if (!G2 || !G2.round) return;
       const r = G2.round;
-      const history = (G2.history || []).concat([{ n: r.n, giver: r.giver, clue1: r.clue1, clue2: r.clue2, skipped: true }]).slice(-40);
+      const history = (G2.history || []).concat([{ n: r.n, giver: r.giver, team: r.team, clue1: r.clue1, clue2: r.clue2, skipped: true }]).slice(-60);
       resetRoundUI();
       commit(Object.assign(nextPatch(G2, S.players), { history }));
     });
@@ -635,7 +805,7 @@ const ACT = {
   again() {
     const G = S.game; if (!G || !isAdmin(G)) return;
     resetRoundUI();
-    commit({ status: "lobby", round: null, score: null, history: [] });
+    commit({ status: "lobby", round: null, score: null, tscore: null, turns: null, history: [] });
   }
 };
 
@@ -656,11 +826,14 @@ function setHTML(el, html) {
 }
 function show(view) {
   for (const id of ["vHome", "vLobby", "vGame", "vOver"]) $("#" + id).hidden = id !== view;
+  $(".app").classList.toggle("is-wide", view === "vGame");
   if (S.view !== view) { S.view = view; window.scrollTo(0, 0); keepAwake(view === "vGame"); }
 }
 const msg = html => `<p class="msg">${html}</p>`;
-const sw = (i, cls) => `<span class="sw${cls ? " " + cls : ""}" style="background:${COLORS[i]}"></span>`;
+const sw = (i, cls) => `<span class="sw${cls ? " " + cls : ""}" style="background:${BD.colors[i]}"></span>`;
+const segBtn = (act, arg, label, on) => `<button type="button" data-act="${act}" data-arg="${esc(arg)}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
 const stepper = n => `<div class="stepper" role="group" aria-label="Сколько раз каждый ведёт"><button type="button" data-act="laps" data-arg="-1" aria-label="Меньше"${n <= MIN_LAPS ? " disabled" : ""}>−</button><output aria-live="polite">${n}</output><button type="button" data-act="laps" data-arg="1" aria-label="Больше"${n >= MAX_LAPS ? " disabled" : ""}>+</button></div>`;
+const teamName = t => `«${TEAMS[t]}»`;
 
 function render() {
   try {
@@ -678,8 +851,11 @@ function render() {
 function renderTop() {
   const G = S.game;
   let html = "";
-  if (S.mode === "online" && G && G.round && G.status === "play") html = `<span class="chip">Вы <b>${(G.score || {})[S.uid] || 0}</b></span><span class="chip">${Math.min(G.round.n, G.rounds)}/${G.rounds}</span>`;
-  else if (S.mode === "online" && S.code) html = `<span class="chip">${esc(S.code)}</span>`;
+  if (S.mode === "online" && G && G.round && G.status === "play") {
+    const roundChip = `<span class="chip">${Math.min(G.round.n, G.rounds)}/${G.rounds}</span>`;
+    if (isTeams(G)) html = [0, 1].map(t => `<span class="chip t${t}${G.round.team === t ? " is-active" : ""}" title="${TEAMS[t]}"><span class="tdot"></span>${TEAM_SHORT[t]} <b>${G.tscore[t]}</b></span>`).join("") + roundChip;
+    else html = `<span class="chip">Вы <b>${(G.score || {})[S.uid] || 0}</b></span>${roundChip}`;
+  } else if (S.mode === "online" && S.code) html = `<span class="chip">${esc(S.code)}</span>`;
   setHTML($("#topRight"), html);
 }
 
@@ -721,28 +897,39 @@ function roomsHTML() {
 function chipMark(G, seat) {
   const r = G && G.round;
   if (!r || G.status !== "play") return "";
+  if (isTeams(G) && SHARED[r.phase]) return r.votes && r.votes[seat] ? "✓" : "";
   if (r.phase === "guess1" || r.phase === "guess2") { const g = r[guessKey(r.phase)]; return g && isCell(g[seat]) ? "✓" : ""; }
   if (r.phase === "result") return r.ready && r.ready[seat] ? "✓" : "";
   return "";
 }
+function playerTags(G, seat) {
+  const r = G && G.round, tags = [];
+  if (seat === S.uid) tags.push("вы");
+  if (G && G.status === "play" && r && r.giver === seat) tags.push("ведущий");
+  if (G && adminSeat(G) === seat) tags.push("админ");
+  return tags.map(t => `<span class="tag">${t}</span>`).join("");
+}
+const playerDot = (G, p) => isTeams(G) ? `<span class="tdot t${p.team}"></span>` : `<span class="cdot" style="background:${colorOf(p.seat)}"></span>`;
 function plChip(p, G) {
-  const r = G && G.round;
-  const tags = [];
-  if (p.seat === S.uid) tags.push("вы");
-  if (G && G.status === "play" && r && r.giver === p.seat) tags.push("ведущий");
-  if (G && adminSeat(G) === p.seat) tags.push("админ");
-  const score = G && G.status !== "lobby" ? `<span class="sc">${(G.score || {})[p.seat] || 0}</span>` : "";
+  const score = G && G.status !== "lobby" && !isTeams(G) ? `<span class="sc">${(G.score || {})[p.seat] || 0}</span>` : "";
   const mk = chipMark(G, p.seat);
-  return `<span class="pl${p.online ? "" : " is-off"}" title="${p.online ? "в сети" : "не в сети"}"><span class="cdot" style="background:${colorOf(p.seat)}"></span><span class="nm">${esc(p.name || "Игрок")}</span>${tags.map(t => `<span class="tag">${t}</span>`).join("")}${score}${mk ? `<span class="mk">${mk}</span>` : ""}</span>`;
+  return `<span class="pl${p.online ? "" : " is-off"}" title="${p.online ? "в сети" : "не в сети"}">${playerDot(G, p)}<span class="nm">${esc(p.name || "Игрок")}</span>${playerTags(G, p.seat)}${score}${mk ? `<span class="mk">${mk}</span>` : ""}</span>`;
 }
 
 /* Лобби комнаты */
 function renderLobby() {
   show("vLobby");
-  const G = S.game, admin = isAdmin(G), adminName = nameOf(adminSeat(G));
+  const G = S.game, admin = isAdmin(G), adminName = nameOf(adminSeat(G)), teams = isTeams(G);
   const players = sortedPlayers(S.players), n = players.length, laps = G.laps || 2;
-  const canStart = n >= 2, why = canStart ? "" : "Нужно минимум 2 игрока. Позовите кого-нибудь в комнату.";
+  let canStart, why = "";
+  if (teams) { canStart = teamMembers(S.players, 0).length >= 2 && teamMembers(S.players, 1).length >= 2; if (!canStart) why = "В каждой команде нужно минимум 2 игрока."; }
+  else { canStart = n >= 2; if (!canStart) why = "Нужно минимум 2 игрока. Позовите кого-нибудь в комнату."; }
+  const total = roundsFor(G, S.players);
   if (S.drafts.nick == null || S.drafts.nick === "") S.drafts.nick = (myPlayer() && myPlayer().name) || S.nick;
+  const playersBlock = teams
+    ? `<div class="teams">${[0, 1].map(t => { const mem = teamMembers(S.players, t); return `<div class="team t${t}"><div class="team-name"><span class="tdot"></span>${TEAMS[t]}</div>${mem.map(p => plChip(p, G)).join("") || `<span class="msg small">пока никого</span>`}</div>`; }).join("")}</div>
+       <div class="row"><button class="btn" type="button" data-act="switchTeam"${myPlayer() ? "" : " disabled"}>Сменить команду</button>${admin ? `<button class="btn" type="button" data-act="shuffle">Перемешать</button>` : ""}</div>`
+    : `<div class="players">${players.map(p => plChip(p, G)).join("")}</div>`;
   setHTML($("#vLobby"), `
     <div class="lobby-head">
       <div><div class="eyebrow">Код комнаты</div><div class="code">${esc(S.code)}</div></div>
@@ -756,18 +943,27 @@ function renderLobby() {
       </div>
     </div>
     <div class="panel">
-      <h2>Правила</h2>
-      ${msg("Каждый играет сам за себя. Ведущий по очереди выбирает цвет и даёт подсказку в одно слово, все тайно ставят фишку. Потом фишки открываются, ведущий даёт вторую подсказку до двух слов, и все ставят ещё по фишке.")}
-      ${msg("Точно в цвет — <b>3</b>, в рамке 3×3 вокруг — <b>2</b>, на клетку дальше рамки — <b>1</b>. Ведущий получает <b>+1</b> за каждую фишку в рамке 3×3.")}
+      <h2>Режим</h2>
+      ${admin
+        ? `<div class="seg" role="group" aria-label="Режим">${["solo", "teams"].map(m => segBtn("setMode", m, MODE_NAMES[m], G.mode === m)).join("")}</div>`
+        : `<p class="mode-name">${MODE_NAMES[G.mode]}</p>`}
+      ${RULES[G.mode].map(t => msg(t)).join("")}
+    </div>
+    <div class="panel">
+      <h2>Палитра и раунды</h2>
+      ${admin
+        ? `<div class="seg" role="group" aria-label="Палитра">${Object.keys(BOARDS).map(k => segBtn("setSize", k, BOARDS[k].name, G.size === k)).join("")}</div>`
+        : `<p class="mode-name">${BOARDS[G.size].name}</p>`}
+      ${msg(BOARDS[G.size].hint)}
       ${admin
         ? `<div class="setting"><span class="label">Сколько раз каждый будет ведущим</span>${stepper(laps)}</div>`
         : `<p class="msg">Каждый будет ведущим: <b>${laps}</b> ${plural(laps, "раз", "раза", "раз")}</p>`}
-      ${n >= 2 ? `<p class="msg small">Всего раундов: <b>${laps * n}</b></p>` : ""}
+      ${total > 0 ? `<p class="msg small">Всего раундов: <b>${total}</b>${teams ? ` — по ${total / 2} на команду` : ""}</p>` : ""}
       ${admin ? "" : `<p class="msg small">Настройки меняет админ — ${esc(adminName)}.</p>`}
     </div>
     <div class="panel">
       <h2>Игроки · ${n}</h2>
-      <div class="players">${players.map(p => plChip(p, G)).join("")}</div>
+      ${playersBlock}
     </div>
     ${admin
       ? `${why ? msg(why) : ""}<button class="btn btn-primary btn-block" type="button" data-act="start"${canStart ? "" : " disabled"}>Начать игру</button>`
@@ -777,127 +973,215 @@ function renderLobby() {
 
 /* Раунд */
 function cone(seat, cell, extra) { return { cell, color: colorOf(seat), letter: letterOf(seat), cls: extra || "" }; }
+const tcone = (team, cell, letter, extra) => ({ cell, color: teamColor(team), letter, cls: extra || "" });
+function gridMarks(G, secret) {
+  const r = G.round, k = rKey(G), giver = r.giver === S.uid, cones = [];
+  let marks = "";
+  if (r.phase === "result") marks += targetHTML(r.target);
+  else {
+    if (giver && r.phase === "think" && S.ui.card && S.ui.cardKey === k) {
+      S.ui.card.forEach((c, i) => {
+        marks += `<span class="cand${S.ui.pick === i ? " is-on" : ""}" style="left:${((colOf(c) + .5) / BD.cols * 100).toFixed(3)}%;top:${((rowOf(c) + .5) / BD.rows * 100).toFixed(3)}%">${i + 1}</span>`;
+      });
+    }
+    if (giver && secret != null && r.phase !== "think") marks += boxHTML(secret, 1, "frame") + boxHTML(secret, 0, "tgt");
+  }
+  if (isTeams(G)) {
+    if (isCell(r.c1)) cones.push(tcone(r.team, r.c1, "1"));
+    if (isCell(r.c2)) cones.push(tcone(r.team, r.c2, "2"));
+    if (r.phase === "result" && isCell(r.steal)) cones.push(tcone(1 - r.team, r.steal, "П"));
+    if (SHARED[r.phase]) {
+      const s = sharedSel(G);
+      if (isCell(s)) cones.push(tcone(r.phase === "steal" ? 1 - r.team : r.team, s, r.phase === "steal" ? "П" : r.phase === "guess2" ? "2" : "1", "is-ghost" + (canMoveShared(G) ? " is-sel" : "")));
+    }
+  } else {
+    const g1 = r.g1 || {}, g2 = r.g2 || {};
+    if (r.phase === "result") {
+      Object.keys(g1).forEach(u => { if (isCell(g1[u])) cones.push(cone(u, g1[u])); });
+      Object.keys(g2).forEach(u => { if (isCell(g2[u])) cones.push(cone(u, g2[u], "is-two")); });
+    } else {
+      /* Первые фишки видны всем после первого круга; свои — всегда */
+      const showAll1 = r.phase === "clue2" || r.phase === "guess2";
+      Object.keys(g1).forEach(u => { if (isCell(g1[u]) && (showAll1 || u === S.uid)) cones.push(cone(u, g1[u])); });
+      if (isCell(g2[S.uid])) cones.push(cone(S.uid, g2[S.uid], "is-two"));
+      if (myTurn(G) && isCell(S.sel)) cones.push(cone(S.uid, S.sel, "is-ghost is-sel" + (r.phase === "guess2" ? " is-two" : "")));
+    }
+  }
+  return marks + conesHTML(cones);
+}
 function renderGame() {
   show("vGame");
-  const G = S.game, r = G.round, k = rKey(G), giver = r.giver === S.uid;
+  const G = S.game, r = G.round, k = rKey(G), giver = r.giver === S.uid, teams = isTeams(G);
   if (giver && r.phase !== "think" && getSecret(G) == null && S.secretChecked !== k) loadSecret(G);
   const secret = getSecret(G), st = roundStatus(G);
 
-  setHTML($("#gHead"), `<div class="eyebrow">Раунд ${r.n} из ${G.rounds}</div><div class="who">Ведущий: <b>${giver ? "вы" : esc(nameOf(r.giver))}</b></div>`);
+  setHTML($("#gHead"), `<div class="eyebrow">Раунд ${r.n} из ${G.rounds}${teams ? ` · ход ${teamName(r.team)}` : ""}</div><div class="who">Ведущий: <b>${giver ? "вы" : esc(nameOf(r.giver))}</b></div>`);
 
-  /* Подсказки */
   let clues = "";
   if (r.clue1) clues += `<div class="clue${r.clue2 ? " is-old" : ""}"><small>Подсказка 1</small>«${esc(r.clue1)}»</div>`;
   if (r.clue2) clues += `<div class="clue"><small>Подсказка 2</small>«${esc(r.clue2)}»</div>`;
   setHTML($("#gClue"), clues);
   $("#gClue").hidden = !clues;
 
-  /* Палитра */
-  let marks = "";
-  const g1 = r.g1 || {}, g2 = r.g2 || {}, cones = [];
-  if (r.phase === "result") {
-    marks += targetHTML(r.target);
-    Object.keys(g1).forEach(u => { if (isCell(g1[u])) cones.push(cone(u, g1[u])); });
-    Object.keys(g2).forEach(u => { if (isCell(g2[u])) cones.push(cone(u, g2[u], "is-two")); });
-  } else {
-    if (giver && r.phase === "think" && S.ui.card && S.ui.cardKey === k) {
-      S.ui.card.forEach((c, i) => {
-        marks += `<span class="cand${S.ui.pick === i ? " is-on" : ""}" style="left:${((colOf(c) + .5) / COLS * 100).toFixed(3)}%;top:${((rowOf(c) + .5) / ROWS * 100).toFixed(3)}%">${i + 1}</span>`;
-      });
-    }
-    if (giver && secret != null && r.phase !== "think") marks += boxHTML(secret, 1, "frame") + boxHTML(secret, 0, "tgt");
-    /* Первые фишки видны всем после первого круга; свои — всегда */
-    const showAll1 = r.phase === "clue2" || r.phase === "guess2";
-    Object.keys(g1).forEach(u => { if (isCell(g1[u]) && (showAll1 || u === S.uid)) cones.push(cone(u, g1[u])); });
-    if (isCell(g2[S.uid])) cones.push(cone(S.uid, g2[S.uid], "is-two"));
-    if (myTurn(G) && isCell(S.sel)) cones.push(cone(S.uid, S.sel, "is-ghost is-sel" + (r.phase === "guess2" ? " is-two" : "")));
-  }
-  gridG.setMarks(marks + conesHTML(cones));
-  gridG.setLive(myTurn(G));
+  gridG.setBoard(BD);
+  gridG.setMarks(gridMarks(G, secret));
+  gridG.setLive(canPoint(G));
 
-  setHTML($("#gPanel"), panelHTML(G, secret, st));
+  setHTML($("#gPanel"), teams ? teamsPanelHTML(G, st) : panelHTML(G, st));
+  setHTML($("#gBoard"), boardHTML(G));
   setHTML($("#gPlayers"), `<div class="players">${sortedPlayers(S.players).map(p => plChip(p, G)).join("")}</div>`);
   setHTML($("#gFoot"), (r.phase !== "result" && canSkip(G) ? `<button class="btn-quiet" type="button" data-act="skip">${confirmLabel("skip", "Пропустить раунд")}</button>` : "")
     + `<button class="btn-quiet" type="button" data-act="leave">${confirmLabel("leave", "Выйти из комнаты")}</button>`);
+}
+/* Боковая таблица (на широком экране) */
+function boardHTML(G) {
+  if (isTeams(G)) {
+    return [0, 1].map(t => `<div class="side-team t${t}${G.round && G.round.team === t ? " is-active" : ""}">
+      <div class="side-team-head"><span class="tdot"></span><span class="side-team-name">${TEAMS[t]}</span><span class="side-team-score">${G.tscore[t]}</span></div>
+      ${teamMembers(S.players, t).map(p => sideRow(G, p, "")).join("") || `<span class="msg small">пока никого</span>`}
+    </div>`).join("");
+  }
+  const sc = G.score || {};
+  const rows = sortedPlayers(S.players).map(p => ({ p, s: sc[p.seat] || 0 })).sort((a, b) => b.s - a.s);
+  return `<h2>Таблица</h2>` + rows.map((x, i) => sideRow(G, x.p, x.s, i + 1)).join("");
+}
+function sideRow(G, p, score, rank) {
+  const mk = chipMark(G, p.seat);
+  return `<div class="side-row${p.seat === S.uid ? " is-me" : ""}${p.online ? "" : " is-off"}">${rank ? `<span class="rank">${rank}</span>` : ""}${playerDot(G, p)}<span class="who">${esc(p.name)}</span>${playerTags(G, p.seat)}${mk ? `<span class="mk">${mk}</span>` : ""}${score !== "" ? `<span class="val">${score}</span>` : ""}</div>`;
 }
 function giverAway(G, text) {
   const r = G.round;
   if (S.online.has(r.giver) || r.giver === S.uid) return msg(text);
   return msg(`${text} Но ведущий <b>${esc(nameOf(r.giver))}</b> сейчас не в сети.`) + (isAdmin(G) ? `<button class="btn btn-block" type="button" data-act="skip">${confirmLabel("skip", "Пропустить раунд")}</button>` : "");
 }
-function panelHTML(G, secret, st) {
-  const r = G.round, giver = r.giver === S.uid, k = rKey(G);
-  if (r.phase === "think") {
-    if (!giver) return giverAway(G, `<b>${esc(nameOf(r.giver))}</b> выбирает цвет и придумывает подсказку<span class="dots"></span>`);
-    if (!S.ui.card || S.ui.cardKey !== k) return msg("Вы ведущий. Проверьте, что экран никто не видит, и возьмите карточку.")
-      + `<button class="btn btn-primary btn-block" type="button" data-act="draw">Взять карточку</button>`;
-    const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue, 1) : "";
-    return msg("Выберите один из четырёх цветов — он отмечен на палитре — и опишите его одним словом. Основные цвета называть нельзя.")
-      + `<div class="card" role="group" aria-label="Карточка">${S.ui.card.map((c, i) => `<button type="button" data-act="pick" data-arg="${i}" aria-pressed="${S.ui.pick === i}">${sw(c)}<span>${i + 1} · ${cellName(c)}</span></button>`).join("")}</div>
-      <div class="field"><label for="clueInput">Подсказка — одно слово</label><input id="clueInput" data-draft="clue" type="text" maxlength="30" autocomplete="off" placeholder="Например: мандарин"></div>
-      <p class="status" id="clueWarn">${esc(bad)}</p>
-      <button class="btn btn-primary btn-block" id="clueSubmit" type="button" data-act="submitClue1"${S.drafts.clue.trim() && !bad ? "" : " disabled"}>Отправить подсказку</button>
-      <button class="btn-quiet" type="button" data-act="draw">Другая карточка</button>`;
-  }
+function pickbarHTML(G, sel) {
+  const bad = sel != null && cellProblem(G, sel);
+  return `<div class="pickbar">${sel != null ? `${sw(sel, "sw-lg")}<span class="cellname">${cellName(sel)}</span>${bad ? `<span class="status">занято</span>` : ""}` : `<span class="status">Клетка не выбрана</span>`}</div>`;
+}
+const dpad = (act, label, primary, disabled) => `<div class="row dpad"><button class="btn" type="button" data-act="nudge" data-arg="l" aria-label="Левее">←</button><button class="btn" type="button" data-act="nudge" data-arg="u" aria-label="Выше">↑</button><button class="btn${primary ? " btn-primary" : ""} grow" type="button" data-act="${act}"${disabled ? " disabled" : ""}>${label}</button><button class="btn" type="button" data-act="nudge" data-arg="d" aria-label="Ниже">↓</button><button class="btn" type="button" data-act="nudge" data-arg="r" aria-label="Правее">→</button></div>`;
+const keysHint = `<p class="status keys-hint">Стрелки на клавиатуре двигают фишку, Enter — подтвердить.</p>`;
+function thinkHTML(G) {
+  const r = G.round, k = rKey(G);
+  if (r.giver !== S.uid) return giverAway(G, `<b>${esc(nameOf(r.giver))}</b>${isTeams(G) ? ` (${teamName(r.team)})` : ""} выбирает цвет и придумывает подсказку<span class="dots"></span>`);
+  if (!S.ui.card || S.ui.cardKey !== k) return msg("Вы ведущий. Проверьте, что экран никто не видит, и возьмите карточку.")
+    + `<button class="btn btn-primary btn-block" type="button" data-act="draw">Взять карточку</button>`;
+  const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue, 1) : "";
+  return msg("Выберите один из четырёх цветов — он отмечен на палитре — и опишите его одним словом. Основные цвета называть нельзя.")
+    + `<div class="card" role="group" aria-label="Карточка">${S.ui.card.map((c, i) => `<button type="button" data-act="pick" data-arg="${i}" aria-pressed="${S.ui.pick === i}">${sw(c)}<span>${i + 1} · ${cellName(c)}</span></button>`).join("")}</div>
+    <div class="field"><label for="clueInput">Подсказка — одно слово</label><input id="clueInput" data-draft="clue" type="text" maxlength="30" autocomplete="off" placeholder="Например: мандарин"></div>
+    <p class="status" id="clueWarn">${esc(bad)}</p>
+    <button class="btn btn-primary btn-block" id="clueSubmit" type="button" data-act="submitClue1"${S.drafts.clue.trim() && !bad ? "" : " disabled"}>Отправить подсказку</button>
+    <button class="btn-quiet" type="button" data-act="draw">Другая карточка</button>`;
+}
+function clue2HTML(G, waitText) {
+  const r = G.round;
+  if (r.giver !== S.uid) return giverAway(G, waitText);
+  const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue, 2) : "";
+  return msg("Дайте вторую подсказку — не больше двух слов, — чтобы подвести ближе к цвету.")
+    + `<div class="field"><label for="clueInput">Подсказка — до двух слов</label><input id="clueInput" data-draft="clue" type="text" maxlength="40" autocomplete="off" placeholder="Например: спелый апельсин"></div>
+    <p class="status" id="clueWarn">${esc(bad)}</p>
+    <button class="btn btn-primary btn-block" id="clueSubmit" type="button" data-act="submitClue2"${S.drafts.clue.trim() && !bad ? "" : " disabled"}>Отправить подсказку</button>`;
+}
+function forceBtn(G, st) {
+  const r = G.round;
+  return isAdmin(G) && st.done.length > 0 && st.done.length < st.req.length && r.force !== r.phase ? `<button class="btn-quiet" type="button" data-act="force">Не ждать остальных</button>` : "";
+}
+function readyHTML(G, st) {
+  const r = G.round, iReady = r.ready && r.ready[S.uid];
+  const label = iReady ? "Отменить готовность" : (gameWillEnd(G) ? "Готов — к итогам" : "Готов к следующему раунду");
+  const status = st.ready ? msg(`Все готовы<span class="dots"></span>`) : `<p class="status">Готовы <b>${st.done.length} из ${st.req.length}</b></p>`;
+  return `<button class="btn${iReady ? "" : " btn-primary"} btn-block" type="button" data-act="ready">${label}</button>` + status;
+}
+/* Панель «Каждый за себя» */
+function panelHTML(G, st) {
+  const r = G.round, giver = r.giver === S.uid;
+  if (r.phase === "think") return thinkHTML(G);
   if (r.phase === "guess1" || r.phase === "guess2") {
     const second = r.phase === "guess2";
-    const stat = `<p class="status">Поставили <b>${st.done.length} из ${st.req.length}</b></p>`;
-    const force = isAdmin(G) && st.done.length > 0 && st.done.length < st.req.length && r.force !== r.phase ? `<button class="btn-quiet" type="button" data-act="force">Не ждать остальных</button>` : "";
-    if (st.ready) return second ? giverAway(G, `Все поставили. Считаем очки<span class="dots"></span>`) : giverAway(G, `Все поставили. Открываем фишки<span class="dots"></span>`);
+    const stat = `<p class="status">Поставили <b>${st.done.length} из ${st.req.length}</b></p>`, force = forceBtn(G, st);
+    if (st.ready) return giverAway(G, second ? `Все поставили. Считаем очки<span class="dots"></span>` : `Все поставили. Открываем фишки<span class="dots"></span>`);
     if (giver) return msg(second ? "Игроки ставят вторые фишки." : "Игроки ставят фишки. Их увидят все, когда ответит каждый.") + stat + force;
     if (!myPlayer()) return msg("Игроки ставят фишки.") + stat;
     const g = r[guessKey(r.phase)] || {};
-    if (isCell(g[S.uid])) return msg(`Фишка стоит на ${sw(g[S.uid])} <b class="cellname">${cellName(g[S.uid])}</b>. Ждём остальных.`).replace('<p class="msg">', '<p class="msg pickbar">')
+    if (isCell(g[S.uid])) return `<p class="msg pickbar">Фишка стоит на ${sw(g[S.uid])} <b class="cellname">${cellName(g[S.uid])}</b>. Ждём остальных.</p>`
       + `<button class="btn btn-block" type="button" data-act="unplace">Передвинуть фишку</button>` + stat + force;
     const sel = isCell(S.sel) ? S.sel : null;
-    const blocked = sel != null && (blockedCells(G).has(sel) || (second && r.g1 && r.g1[S.uid] === sel));
+    const blocked = sel != null && (!!cellProblem(G, sel) || (second && r.g1 && r.g1[S.uid] === sel));
     return msg(second ? "Поставьте вторую фишку. Нельзя ставить на клетку, где уже стоит фишка." : "Нажмите на цвет, который подходит к подсказке. Фишку никто не увидит, пока не ответят все.")
-      + `<div class="pickbar">${sel != null ? `${sw(sel, "sw-lg")}<span class="cellname">${cellName(sel)}</span>${blocked ? `<span class="status">занято</span>` : ""}` : `<span class="status">Клетка не выбрана</span>`}</div>
-      <div class="row dpad"><button class="btn" type="button" data-act="nudge" data-arg="l" aria-label="Левее">←</button><button class="btn" type="button" data-act="nudge" data-arg="u" aria-label="Выше">↑</button><button class="btn btn-primary grow" type="button" data-act="place"${sel != null && !blocked ? "" : " disabled"}>Поставить</button><button class="btn" type="button" data-act="nudge" data-arg="d" aria-label="Ниже">↓</button><button class="btn" type="button" data-act="nudge" data-arg="r" aria-label="Правее">→</button></div>`
-      + stat + force;
+      + pickbarHTML(G, sel) + dpad("place", "Поставить", true, sel == null || blocked) + keysHint + stat + force;
   }
-  if (r.phase === "clue2") {
-    if (!giver) return giverAway(G, `Все фишки открыты. <b>${esc(nameOf(r.giver))}</b> придумывает вторую подсказку<span class="dots"></span>`);
-    const bad = S.drafts.clue.trim() ? clueProblem(S.drafts.clue, 2) : "";
-    return msg("Фишки открыты. Дайте вторую подсказку — не больше двух слов, — чтобы подвести игроков ближе к цвету.")
-      + `<div class="field"><label for="clueInput">Подсказка — до двух слов</label><input id="clueInput" data-draft="clue" type="text" maxlength="40" autocomplete="off" placeholder="Например: спелый апельсин"></div>
-      <p class="status" id="clueWarn">${esc(bad)}</p>
-      <button class="btn btn-primary btn-block" id="clueSubmit" type="button" data-act="submitClue2"${S.drafts.clue.trim() && !bad ? "" : " disabled"}>Отправить подсказку</button>`;
-  }
-  return resultHTML(G, st);
-}
-function resultHTML(G, st) {
-  const r = G.round, end = gameWillEnd(G), res = r.results || {};
+  if (r.phase === "clue2") return clue2HTML(G, `Все фишки открыты. <b>${esc(nameOf(r.giver))}</b> придумывает вторую подсказку<span class="dots"></span>`);
+  const res = r.results || {};
   const rows = Object.keys(res).map(u => ({ u, a: res[u].a || 0, b: res[u].b || 0 })).sort((x, y) => (y.a + y.b) - (x.a + x.b));
   const mine = res[S.uid];
-  const title = r.giver === S.uid ? `Вы ведущий: +${r.giverPts || 0}` : (mine ? `Вам +${(mine.a || 0) + (mine.b || 0)}` : "Итоги раунда");
-  const body = `<div class="pickbar">${sw(r.target, "sw-lg")}<div><div class="res-title">${title}</div><span class="status">Цвет <b>${cellName(r.target)}</b></span></div></div>
+  const title = giver ? `Вы ведущий: +${r.giverPts || 0}` : (mine ? `Вам +${(mine.a || 0) + (mine.b || 0)}` : "Итоги раунда");
+  return `<div class="pickbar">${sw(r.target, "sw-lg")}<div><div class="res-title">${title}</div><span class="status">Цвет <b>${cellName(r.target)}</b></span></div></div>
     <div class="board">${rows.map(x => `<div class="board-row${x.u === S.uid ? " is-me" : ""}"><span class="rank"></span><span class="cdot" style="background:${colorOf(x.u)}"></span><span class="who">${esc(nameOf(x.u))}</span><span class="val"><small>${x.a} + ${x.b}</small>+${x.a + x.b}</span></div>`).join("") || msg("Никто не успел поставить фишку.")}</div>
-    ${msg(`Ведущий <b>${esc(nameOf(r.giver))}</b> получает +${r.giverPts || 0} — по очку за каждую фишку в рамке 3×3.`)}`;
-  const iReady = r.ready && r.ready[S.uid];
-  const label = iReady ? "Отменить готовность" : (end ? "Готов — к итогам" : "Готов к следующему раунду");
-  const status = st.ready ? msg(`Все готовы<span class="dots"></span>`) : `<p class="status">Готовы <b>${st.done.length} из ${st.req.length}</b></p>`;
-  return body + `<button class="btn${iReady ? "" : " btn-primary"} btn-block" type="button" data-act="ready">${label}</button>` + status;
+    ${msg(`Ведущий <b>${esc(nameOf(r.giver))}</b> получает +${r.giverPts || 0} — по очку за каждую фишку в рамке 3×3.`)}` + readyHTML(G, st);
+}
+/* Панель «Команды» */
+function teamsPanelHTML(G, st) {
+  const r = G.round, giver = r.giver === S.uid, me = myPlayer(), mine = me && me.team === r.team;
+  const act = teamName(r.team), opp = teamName(1 - r.team);
+  if (r.phase === "think") return thinkHTML(G);
+  if (r.phase === "clue2") return clue2HTML(G, `Первая фишка стоит. <b>${esc(nameOf(r.giver))}</b> придумывает вторую подсказку<span class="dots"></span>`);
+  if (SHARED[r.phase]) {
+    const steal = r.phase === "steal";
+    const stat = `<p class="status">Согласны <b>${st.done.length} из ${st.req.length}</b></p>`, force = forceBtn(G, st);
+    if (st.ready) return giverAway(G, steal ? `Перехват стоит. Считаем очки<span class="dots"></span>` : `Команда договорилась. Ставим фишку<span class="dots"></span>`);
+    if (canMoveShared(G)) {
+      const sel = sharedSel(G), s = isCell(sel) ? sel : null, voted = r.votes && r.votes[S.uid];
+      const text = steal
+        ? `Перехват! Договоритесь с командой и поставьте одну общую фишку. Если она окажется ближе к цвету, чем обе фишки ${act}, вы получите +1.`
+        : `Двигайте общую фишку команды — её видят все. Когда все нажмут «Согласен», она встанет. Любой сдвиг сбрасывает согласия.${r.phase === "guess2" ? " На клетку первой фишки ставить нельзя." : ""}`;
+      return msg(text) + pickbarHTML(G, s)
+        + dpad("vote", voted ? "Отменить согласие" : "Согласен", !voted, !voted && (s == null || !!cellProblem(G, s))) + keysHint + stat + force;
+    }
+    if (steal) return msg(mine || giver ? `Соперники ${opp} ставят фишку-перехват. Если она окажется ближе к цвету, чем обе ваши, им +1.` : `Ваша команда ставит перехват.`) + stat + force;
+    if (giver) return msg(`Ваша команда ставит ${r.phase === "guess2" ? "вторую" : "первую"} фишку. Вы видите цвет — держите лицо.`) + stat + force;
+    return msg(`Команда ${act} ставит ${r.phase === "guess2" ? "вторую" : "первую"} фишку. Следите: потом ваша команда поставит перехват.`) + stat + force;
+  }
+  /* Итог */
+  const a = r.ta || 0, b = r.tb || 0;
+  const stealLine = r.steal == null ? `${opp} не ставили перехват.` : r.stealPt ? `Перехват ${opp} ближе к цвету: <b>+1</b> соперникам.` : `Перехват ${opp} не ближе фишек команды — без очков.`;
+  return `<div class="result"><div class="pts${a + b ? "" : " is-zero"}">${a + b ? "+" + (a + b) : "0"}</div><div><div class="res-title">Команде ${act}</div><p class="msg">Фишки: ${a} + ${b}</p></div></div>
+    <div class="pickbar">${sw(r.target, "sw-lg")}<span class="status">Цвет <b>${cellName(r.target)}</b></span></div>
+    ${msg(stealLine)}` + readyHTML(G, st);
 }
 
 /* Итоги */
 function renderOver() {
   show("vOver");
-  const G = S.game, sc = G.score || {};
-  const rows = sortedPlayers(S.players).map(p => ({ p, s: sc[p.seat] || 0 })).sort((x, y) => y.s - x.s);
-  const best = rows.length ? rows[0].s : 0, top = rows.filter(x => x.s === best).map(x => esc(x.p.name));
-  const head = `<div class="hero"><div class="eyebrow">Игра окончена</div><h1>${top.length > 1 ? `Ничья: ${top.join(" и ")}` : `Победа: ${top[0] || "—"}`}</h1></div>
-    <div class="board">${rows.map((x, i) => `<div class="board-row${x.p.seat === S.uid ? " is-me" : ""}"><span class="rank">${i + 1}</span><span class="cdot" style="background:${colorOf(x.p.seat)}"></span><span class="who">${esc(x.p.name)}</span><span class="val">${x.s}</span></div>`).join("")}</div>`;
+  const G = S.game, teams = isTeams(G);
+  let head;
+  if (teams) {
+    const [a, b] = G.tscore;
+    head = `<div class="hero"><div class="eyebrow">Игра окончена</div><h1>${a === b ? "Ничья" : `Победили ${teamName(a > b ? 0 : 1)}`}</h1><p class="big-score"><span class="t0">${a}</span> : <span class="t1">${b}</span></p></div>`;
+  } else {
+    const sc = G.score || {};
+    const rows = sortedPlayers(S.players).map(p => ({ p, s: sc[p.seat] || 0 })).sort((x, y) => y.s - x.s);
+    const best = rows.length ? rows[0].s : 0, top = rows.filter(x => x.s === best).map(x => esc(x.p.name));
+    head = `<div class="hero"><div class="eyebrow">Игра окончена</div><h1>${top.length > 1 ? `Ничья: ${top.join(" и ")}` : `Победа: ${top[0] || "—"}`}</h1></div>
+      <div class="board">${rows.map((x, i) => `<div class="board-row${x.p.seat === S.uid ? " is-me" : ""}"><span class="rank">${i + 1}</span><span class="cdot" style="background:${colorOf(x.p.seat)}"></span><span class="who">${esc(x.p.name)}</span><span class="val">${x.s}</span></div>`).join("")}</div>`;
+  }
   const hist = (G.history || []).map(h => {
     const clue = h.skipped ? "раунд пропущен" : [h.clue1, h.clue2].filter(Boolean).map(c => `«${esc(c)}»`).join(" → ");
-    const best = h.results ? Object.keys(h.results).map(u => ({ u, p: (h.results[u].a || 0) + (h.results[u].b || 0) })).sort((a, b) => b.p - a.p)[0] : null;
-    return `<tr><td class="n">${h.n}</td><td>${isCell(h.target) ? sw(h.target) : ""}</td><td>${clue}<div class="msg small">ведущий ${esc(nameOf(h.giver))}${best && best.p ? ` · лучше всех ${esc(nameOf(best.u))}` : ""}</div></td><td class="num">${h.skipped ? "—" : "+" + (h.giverPts || 0)}</td></tr>`;
+    let who, score;
+    if (teams) {
+      who = `${TEAM_SHORT[h.team | 0]} · ведущий ${esc(nameOf(h.giver))}`;
+      score = h.skipped ? "—" : `+${(h.ta || 0) + (h.tb || 0)}${h.stealPt ? ` <span class="side-pt t${1 - (h.team | 0)}">+1</span>` : ""}`;
+    } else {
+      const best = h.results ? Object.keys(h.results).map(u => ({ u, p: (h.results[u].a || 0) + (h.results[u].b || 0) })).sort((x, y) => y.p - x.p)[0] : null;
+      who = `ведущий ${esc(nameOf(h.giver))}${best && best.p ? ` · лучше всех ${esc(nameOf(best.u))}` : ""}`;
+      score = h.skipped ? "—" : "+" + (h.giverPts || 0);
+    }
+    return `<tr><td class="n">${h.n}</td><td>${isCell(h.target) ? sw(h.target) : ""}</td><td>${clue}<div class="msg small">${who}</div></td><td class="num">${score}</td></tr>`;
   }).join("");
   const again = isAdmin(G)
     ? `<button class="btn btn-primary btn-block" type="button" data-act="again">Сыграть ещё</button>`
     : msg(`Новую партию начнёт <b>${esc(nameOf(adminSeat(G)))}</b>.`);
   setHTML($("#vOver"), `${head}
-    ${hist ? `<div class="panel"><h2>Как шли раунды</h2><div class="tbl"><table class="hist"><thead><tr><th>#</th><th>Цвет</th><th>Подсказки</th><th class="num">Ведущему</th></tr></thead><tbody>${hist}</tbody></table></div></div>` : ""}
+    ${hist ? `<div class="panel"><h2>Как шли раунды</h2><div class="tbl"><table class="hist"><thead><tr><th>#</th><th>Цвет</th><th>Подсказки</th><th class="num">${teams ? "Очки" : "Ведущему"}</th></tr></thead><tbody>${hist}</tbody></table></div></div>` : ""}
     ${again}
     <button class="btn-quiet" type="button" data-act="leave">${confirmLabel("leave", "Выйти из комнаты")}</button>`);
 }
@@ -945,18 +1229,31 @@ document.addEventListener("input", e => {
   S.drafts[el.dataset.draft] = v;
   if (el.id === "clueInput") updateClueBtn();
 });
+const ARROWS = { ArrowLeft: "l", ArrowRight: "r", ArrowUp: "u", ArrowDown: "d" };
 document.addEventListener("keydown", e => {
-  if (e.key !== "Enter" || !e.target || e.target.tagName !== "INPUT") return;
-  const id = e.target.id, r = S.game && S.game.round;
-  if (id === "codeInput") ACT.join();
-  else if (id === "clueInput") { if (r && r.phase === "clue2") ACT.submitClue2(); else ACT.submitClue1(); }
-  else if (id === "lobbyNick") ACT.saveNick();
-  else if (id === "homeNick") { if (S.hashCode) ACT.joinRoom(S.hashCode); else ACT.create(); }
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) {
+    if (e.key !== "Enter") return;
+    const id = t.id, r = S.game && S.game.round;
+    if (id === "codeInput") ACT.join();
+    else if (id === "clueInput") { if (r && r.phase === "clue2") ACT.submitClue2(); else ACT.submitClue1(); }
+    else if (id === "lobbyNick") ACT.saveNick();
+    else if (id === "homeNick") { if (S.hashCode) ACT.joinRoom(S.hashCode); else ACT.create(); }
+    return;
+  }
+  /* Клавиатура в игре: стрелки двигают фишку, Enter ставит или соглашается */
+  const G = S.game;
+  if (S.view !== "vGame" || !canPoint(G) || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (ARROWS[e.key]) { e.preventDefault(); ACT.nudge(ARROWS[e.key]); }
+  else if (e.key === "Enter" && !(t && t.closest && t.closest("button"))) {
+    e.preventDefault();
+    if (isTeams(G)) { if (!(G.round.votes && G.round.votes[S.uid])) ACT.vote(); } else ACT.place();
+  }
 });
 
 /* ---------------- Палитры на странице ---------------- */
-const gridG = createGrid($("#gameGrid"), { pick(c) { if (myTurn(S.game)) { S.sel = c; render(); } } });
-const DEMO_TARGET = 5 * COLS + 2, DEMO_START = 6 * COLS + 3;
+const gridG = createGrid($("#gameGrid"), { pick: pickCell });
+const DEMO = board("m"), DEMO_TARGET = 5 * DEMO.cols + 2, DEMO_START = 6 * DEMO.cols + 3;
 let demoSel = DEMO_START;
 const demoG = createGrid($("#demoGrid"), {
   pick(c) {
@@ -969,6 +1266,7 @@ const demoG = createGrid($("#demoGrid"), {
 function demoDraw(open) {
   demoG.setMarks((open ? targetHTML(DEMO_TARGET) : "") + conesHTML([{ cell: demoSel, color: PCOLORS[1], letter: "Я", cls: "is-sel" }]));
 }
+demoG.setBoard(DEMO);
 demoG.setLive(true);
 demoDraw(false);
 

@@ -6,15 +6,22 @@
 /* Палитра */
 .grid{position:relative;border-radius:10px;padding:3px;background:var(--rim);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y}
 .grid.is-live{touch-action:none;cursor:crosshair}
-.cells{display:grid;grid-template-columns:repeat(24, 1fr);border-radius:7px;overflow:hidden}
-.cells i{display:block;aspect-ratio:1 / 1.15}
-.marks{position:absolute;inset:3px;pointer-events:none}
+.cells{display:grid;grid-template-columns:repeat(var(--cols, 24), 1fr);grid-template-rows:repeat(var(--rows, 14), 1fr);aspect-ratio:var(--gw, 1.49);border-radius:7px;overflow:hidden}
+.cells i{display:block;min-width:0;min-height:0}
+.marks{position:absolute;inset:3px;pointer-events:none;container-type:inline-size}
+.grid.is-live .cells i:hover{box-shadow:inset 0 0 0 2px var(--needle), inset 0 0 0 3px var(--needle-edge)}
+.ax{display:none;position:absolute;font:500 10px/1 var(--font-mono);color:var(--muted);pointer-events:none}
+.ax span{position:absolute}
+.ax-top{left:3px;right:3px;top:-16px;height:12px}
+.ax-top span{transform:translateX(-50%)}
+.ax-left{top:3px;bottom:3px;left:-20px;width:14px}
+.ax-left span{right:0;transform:translateY(-50%)}
 .frame{position:absolute;border:2.5px solid var(--needle);box-shadow:0 0 0 1.5px var(--needle-edge), inset 0 0 0 1.5px var(--needle-edge);border-radius:4px}
 .frame.is-outer{border-style:dashed;border-width:2px;box-shadow:none;opacity:.85}
 .tgt{position:absolute;border:3px solid var(--needle-edge);box-shadow:0 0 0 2px var(--needle);border-radius:3px}
-.cand{position:absolute;transform:translate(-50%,-50%);width:6.2%;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:var(--needle);color:var(--needle-edge);border:2px solid var(--needle-edge);font:700 clamp(9px, 2.6vw, 12px)/1 var(--font-mono)}
+.cand{position:absolute;transform:translate(-50%,-50%);width:calc(150% / var(--cols, 24));min-width:16px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:var(--needle);color:var(--needle-edge);border:2px solid var(--needle-edge);font:700 clamp(9px, 2.6vw, 12px)/1 var(--font-mono)}
 .cand.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--needle)}
-.cone{position:absolute;transform:translate(-50%,-50%);width:5.6%;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:var(--needle);color:var(--needle-edge);border:3px solid var(--pc);box-shadow:0 0 0 1.5px var(--needle-edge), 0 2px 4px var(--shadow);font:700 clamp(8px, 2.3vw, 12px)/1 var(--font-body)}
+.cone{position:absolute;transform:translate(-50%,-50%);width:calc(134% / var(--cols, 24));min-width:12px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:var(--needle);color:var(--needle-edge);border:3px solid var(--pc);box-shadow:0 0 0 1.5px var(--needle-edge), 0 2px 4px var(--shadow);font:700 clamp(7px, calc(100cqw / var(--cols, 24) * .5), 15px)/1 var(--font-body)}
 .cone.is-ghost{background:transparent;border-style:dashed;box-shadow:0 0 0 1.5px var(--needle-edge)}
 .cone.is-sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--needle), 0 0 0 4px var(--needle-edge)}
 .cone.is-two::after{content:"";position:absolute;right:-3px;bottom:-3px;width:7px;height:7px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 1.5px var(--needle)}
@@ -93,6 +100,50 @@
 .hist .num{text-align:right;font-family:var(--font-mono);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .hist .n{width:28px;color:var(--muted)}
 .hist .sw{width:24px;height:24px;border-radius:6px}
+
+/* Итог раунда в командах */
+.result{display:flex;align-items:center;gap:16px}
+.result .pts{font:800 48px/1 var(--font-display);color:var(--accent);font-variant-numeric:tabular-nums;flex:none;min-width:64px;text-align:center}
+.result .pts.is-zero{color:var(--muted)}
+.big-score{font:800 44px/1 var(--font-display);margin:0;font-variant-numeric:tabular-nums}
+.big-score .t0{color:var(--team0)} .big-score .t1{color:var(--team1)}
+.side-pt{color:var(--team-c)}
+
+/* Команды в лобби */
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.team{display:flex;flex-direction:column;gap:6px;align-items:flex-start;min-width:0;padding:10px;border-radius:12px;background:var(--bg)}
+.team-name{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px}
+@media (max-width:380px){ .teams{grid-template-columns:1fr} }
+
+/* Раскладка раунда: на телефоне одна колонка, на широком экране — палитра слева, панель и таблица справа */
+.g-main,.g-side{display:contents}
+.g-board{display:none}
+.keys-hint{display:none}
+.side-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:var(--bg);min-width:0;font-size:14px}
+.side-row .rank{font:700 12px var(--font-mono);color:var(--muted);min-width:16px;text-align:right}
+.side-row .who{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-row .mk{font:700 13px var(--font-mono);color:var(--good)}
+.side-row .val{margin-left:auto;font:700 16px var(--font-mono);font-variant-numeric:tabular-nums}
+.side-row.is-me{box-shadow:inset 0 0 0 2px var(--accent)}
+.side-row.is-off{opacity:.5}
+.side-team{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:12px;border:1px solid var(--line)}
+.side-team.is-active{border-color:var(--team-c);box-shadow:inset 0 0 0 1px var(--team-c)}
+.side-team-head{display:flex;align-items:center;gap:8px}
+.side-team-name{font-family:var(--font-display);font-weight:600;font-size:15px}
+.side-team-score{margin-left:auto;font:800 26px/1 var(--font-display);color:var(--team-c);font-variant-numeric:tabular-nums}
+@media (min-width:960px){
+  .app.is-wide{max-width:1320px}
+  #vGame{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:28px;align-items:start}
+  .g-main{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .g-side{display:flex;flex-direction:column;gap:16px;position:sticky;top:12px;min-width:0}
+  .g-board{display:flex;flex-direction:column;gap:8px}
+  #gPlayers{display:none}
+  .keys-hint{display:block}
+  .foot{justify-content:flex-start}
+  .grid{margin:18px 0 0 22px;max-width:calc((100vh - 230px) * var(--gw, 1.5));width:calc(100% - 22px)}
+  .ax{display:block}
+  .clues{flex-direction:row;justify-content:center;align-items:baseline;gap:18px;flex-wrap:wrap}
+}
 
 #vHome.invited .hero{order:-2}
 #vHome.invited .panel-online{order:-1}

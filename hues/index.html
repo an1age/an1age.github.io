@@ -25,7 +25,7 @@
     <section id="vHome" class="view">
       <div class="hero">
         <a class="back-link" href="../">← Все игры</a>
-        <div class="eyebrow">Игра про цвета · от 2 игроков</div>
+        <div class="eyebrow">Игра про цвета · от 2 игроков · можно командами</div>
         <h1>Оттенки</h1>
         <p class="lead">Ведущий видит цвет на большой палитре и описывает его одним словом. Остальные ставят фишки туда, где, по их мнению, этот цвет. Чем ближе, тем больше очков.</p>
       </div>
@@ -38,6 +38,7 @@
         <li><span>Он даёт подсказку в одно слово. Называть основные цвета нельзя: «красный», «синий» и так далее.</span></li>
         <li><span>Каждый тайно ставит фишку. Потом все фишки открываются, ведущий даёт вторую подсказку, уже до двух слов, и все ставят ещё по фишке.</span></li>
         <li><span>Точно в цвет — 3 очка, в рамке 3×3 вокруг — 2, на клетку дальше — 1. Ведущий получает очко за каждую фишку в рамке.</span></li>
+        <li><span>Можно играть командами: команды ходят по очереди и двигают общую фишку, а соперники ставят перехват.</span></li>
       </ol>
       <div class="panel panel-online"><h2>Играть онлайн</h2><div id="homeOnline" class="stack"></div></div>
     </section>
@@ -45,12 +46,17 @@
     <section id="vLobby" class="view" hidden></section>
 
     <section id="vGame" class="view" hidden>
-      <div id="gHead" class="g-head"></div>
-      <div id="gClue" class="clues"></div>
-      <div id="gameGrid" class="grid"></div>
-      <div id="gPanel" class="g-panel"></div>
-      <div id="gPlayers"></div>
-      <div id="gFoot" class="foot"></div>
+      <div class="g-main">
+        <div id="gHead" class="g-head"></div>
+        <div id="gClue" class="clues"></div>
+        <div id="gameGrid" class="grid"></div>
+      </div>
+      <aside class="g-side">
+        <div id="gPanel" class="g-panel"></div>
+        <div id="gBoard" class="g-board panel"></div>
+        <div id="gPlayers"></div>
+        <div id="gFoot" class="foot"></div>
+      </aside>
     </section>
 
     <section id="vOver" class="view" hidden></section>
