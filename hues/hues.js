@@ -174,17 +174,20 @@ function boxHTML(i, rad, cls) {
   return `<span class="${cls}" style="left:${pctX(c0)};top:${pctY(r0)};width:${pctX(c1 - c0 + 1)};height:${pctY(r1 - r0 + 1)}"></span>`;
 }
 const targetHTML = i => boxHTML(i, 2, "frame is-outer") + boxHTML(i, 1, "frame") + boxHTML(i, 0, "tgt");
-/* Фишки: [{cell, color, letter, cls}]. Несколько фишек в одной клетке раскладываются веером. */
+/* Фишки: [{cell, color, cls}] — маленькие кружки цвета игрока. Если в клетке несколько фишек,
+   они делят её сеткой 2 × 2, 3 × 3… и не залезают на соседние клетки. */
 function conesHTML(list) {
   const by = {};
   list.forEach(m => { (by[m.cell] = by[m.cell] || []).push(m); });
   let html = "";
   for (const k of Object.keys(by)) {
-    const g = by[k], n = g.length;
+    const g = by[k], n = g.length, side = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / side);
+    const size = side === 1 ? .58 : .84 / side, last = n - side * (rows - 1);
     g.forEach((m, j) => {
-      const off = n > 1 ? (j - (n - 1) / 2) * 0.55 : 0;
-      const x = (colOf(m.cell) + 0.5 + off) / BD.cols * 100, y = (rowOf(m.cell) + 0.5) / BD.rows * 100;
-      html += `<span class="cone ${m.cls || ""}" style="left:${x.toFixed(3)}%;top:${y.toFixed(3)}%;--pc:${m.color}">${esc(m.letter || "")}</span>`;
+      const row = Math.floor(j / side), inRow = row === rows - 1 ? last : side;
+      const dx = n > 1 ? (j % side - (inRow - 1) / 2) / side : 0, dy = n > 1 ? (row - (rows - 1) / 2) / side : 0;
+      const x = (colOf(m.cell) + .5 + dx) / BD.cols * 100, y = (rowOf(m.cell) + .5 + dy) / BD.rows * 100;
+      html += `<span class="cone ${m.cls || ""}" style="left:${x.toFixed(3)}%;top:${y.toFixed(3)}%;--pc:${m.color};--k:${size.toFixed(3)}"></span>`;
     });
   }
   return html;
@@ -331,7 +334,6 @@ const rKey = G => S.code + ":" + ((G && G.gid) || 0) + ":" + (G && G.round ? G.r
 const phaseKey = G => rKey(G) + ":" + (G && G.round ? G.round.phase : "");
 const myPlayer = () => S.players.find(p => p.seat === S.seat) || null;
 const nameOf = seat => { const p = S.players.find(x => x.seat === seat); return (p && p.name) || "Игрок"; };
-const letterOf = seat => (nameOf(seat).trim()[0] || "?").toUpperCase();
 function currentNick() { return String(S.drafts.nick ?? S.nick).trim().slice(0, 24); }
 /* Админ — создатель комнаты; если он ушёл, права переходят к тому, кто зашёл раньше всех */
 function adminSeat(G) {
@@ -1019,8 +1021,8 @@ function renderLobby() {
 }
 
 /* Раунд */
-function cone(seat, cell, extra) { return { cell, color: colorOf(seat), letter: letterOf(seat), cls: extra || "" }; }
-const tcone = (team, cell, letter, extra) => ({ cell, color: teamColor(team), letter, cls: extra || "" });
+function cone(seat, cell, extra) { return { cell, color: colorOf(seat), cls: extra || "" }; }
+const tcone = (team, cell, extra) => ({ cell, color: teamColor(team), cls: extra || "" });
 function gridMarks(G, secret) {
   const r = G.round, k = rKey(G), giver = r.giver === S.uid, cones = [];
   let marks = "";
@@ -1033,25 +1035,27 @@ function gridMarks(G, secret) {
     }
     if (giver && secret != null && r.phase !== "think") marks += boxHTML(secret, 1, "frame") + boxHTML(secret, 0, "tgt");
   }
+  /* Пока выбирают после второй подсказки, уже стоящие фишки полупрозрачные — не мешают разглядеть цвета */
+  const fade = r.phase === "guess2" || r.phase === "steal" ? "is-faded" : "";
   if (isTeams(G)) {
-    if (isCell(r.c1)) cones.push(tcone(r.team, r.c1, "1"));
-    if (isCell(r.c2)) cones.push(tcone(r.team, r.c2, "2"));
-    if (r.phase === "result" && isCell(r.steal)) cones.push(tcone(1 - r.team, r.steal, "П"));
+    if (isCell(r.c1)) cones.push(tcone(r.team, r.c1, fade));
+    if (isCell(r.c2)) cones.push(tcone(r.team, r.c2, fade));
+    if (r.phase === "result" && isCell(r.steal)) cones.push(tcone(1 - r.team, r.steal));
     if (SHARED[r.phase]) {
       const s = sharedSel(G);
-      if (isCell(s)) cones.push(tcone(r.phase === "steal" ? 1 - r.team : r.team, s, r.phase === "steal" ? "П" : r.phase === "guess2" ? "2" : "1", "is-ghost" + (canMoveShared(G) ? " is-sel" : "")));
+      if (isCell(s)) cones.push(tcone(r.phase === "steal" ? 1 - r.team : r.team, s, "is-ghost" + (canMoveShared(G) ? " is-sel" : "")));
     }
   } else {
     const g1 = r.g1 || {}, g2 = r.g2 || {};
     if (r.phase === "result") {
       Object.keys(g1).forEach(u => { if (isCell(g1[u])) cones.push(cone(u, g1[u])); });
-      Object.keys(g2).forEach(u => { if (isCell(g2[u])) cones.push(cone(u, g2[u], "is-two")); });
+      Object.keys(g2).forEach(u => { if (isCell(g2[u])) cones.push(cone(u, g2[u])); });
     } else {
       /* Первые фишки видны всем после первого круга; свои — всегда */
       const showAll1 = r.phase === "clue2" || r.phase === "guess2";
-      Object.keys(g1).forEach(u => { if (isCell(g1[u]) && (showAll1 || u === S.uid)) cones.push(cone(u, g1[u])); });
-      if (isCell(g2[S.uid])) cones.push(cone(S.uid, g2[S.uid], "is-two"));
-      if (myTurn(G) && isCell(S.sel)) cones.push(cone(S.uid, S.sel, "is-ghost is-sel" + (r.phase === "guess2" ? " is-two" : "")));
+      Object.keys(g1).forEach(u => { if (isCell(g1[u]) && (showAll1 || u === S.uid)) cones.push(cone(u, g1[u], fade)); });
+      if (isCell(g2[S.uid])) cones.push(cone(S.uid, g2[S.uid]));
+      if (myTurn(G) && isCell(S.sel)) cones.push(cone(S.uid, S.sel, "is-ghost is-sel"));
     }
   }
   return marks + conesHTML(cones);
@@ -1311,7 +1315,7 @@ const demoG = createGrid($("#demoGrid"), {
   }
 });
 function demoDraw(open) {
-  demoG.setMarks((open ? targetHTML(DEMO_TARGET) : "") + conesHTML([{ cell: demoSel, color: PCOLORS[1], letter: "Я", cls: "is-sel" }]));
+  demoG.setMarks((open ? targetHTML(DEMO_TARGET) : "") + conesHTML([{ cell: demoSel, color: PCOLORS[1] }]));
 }
 demoG.setBoard(DEMO);
 demoG.setLive(true);

@@ -25,10 +25,10 @@
 .tgt{position:absolute;border:3px solid var(--needle-edge);box-shadow:0 0 0 2px var(--needle);border-radius:3px}
 .cand{position:absolute;transform:translate(-50%,-50%);width:calc(150% / var(--cols, 24));min-width:16px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:var(--needle);color:var(--needle-edge);border:2px solid var(--needle-edge);font:700 clamp(9px, 2.6vw, 12px)/1 var(--font-mono)}
 .cand.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--needle)}
-.cone{position:absolute;transform:translate(-50%,-50%);width:calc(134% / var(--cols, 24));min-width:12px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:var(--needle);color:var(--needle-edge);border:3px solid var(--pc);box-shadow:0 0 0 1.5px var(--needle-edge), 0 2px 4px var(--shadow);font:700 clamp(7px, calc(100cqw / var(--cols, 24) * .5), 15px)/1 var(--font-body)}
-.cone.is-ghost{background:transparent;border-style:dashed;box-shadow:0 0 0 1.5px var(--needle-edge)}
-.cone.is-sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--needle), 0 0 0 4px var(--needle-edge)}
-.cone.is-two::after{content:"";position:absolute;right:-3px;bottom:-3px;width:7px;height:7px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 1.5px var(--needle)}
+.cone{position:absolute;transform:translate(-50%,-50%);width:calc(var(--k) * 100% / var(--cols, 24));min-width:calc(var(--k) * 14px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 55%, var(--needle)), var(--pc) 62%);border:1.5px solid var(--needle);box-shadow:0 0 0 1px var(--needle-edge), 0 1px 3px var(--shadow);transition:opacity .2s}
+.cone.is-faded{opacity:.6}
+.cone.is-ghost{width:calc(var(--k) * 135% / var(--cols, 24));min-width:calc(var(--k) * 20px);background:none;border:3px solid var(--pc);box-shadow:0 0 0 1.5px var(--needle), 0 0 0 2.5px var(--needle-edge), inset 0 0 0 1.5px var(--needle)}
+.cone.is-sel{box-shadow:0 0 0 1.5px var(--needle), 0 0 0 2.5px var(--needle-edge), inset 0 0 0 1.5px var(--needle), 0 0 0 5px color-mix(in srgb, var(--needle) 45%, transparent)}
 
 /* Демо на главной */
 .demo{margin:0;display:flex;flex-direction:column;gap:10px}
